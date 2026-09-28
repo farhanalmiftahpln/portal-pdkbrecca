@@ -1,0 +1,77 @@
+{
+  "1488": {
+    "pekerjaan": {
+      "NO. WO": "1488",
+      "SOP PEKERJAAN": "JUMPER",
+      "INSTRUKSI KERJA": "PEMOTONGAN JUMPER KABEL OUTDOOR",
+      "DETAIL PEKERJAAN": "Pemutusan Jumper Ex Trafo Unit Paria"
+    },
+    "materials": [
+      {
+        "NO. WO": "1488",
+        "NAMA MATERIAL": "Kabel A3C 70mm",
+        "SPESIFIKASI": "70mm2",
+        "VOLUME": "15",
+        "KETERANGAN": "Meter"
+      },
+      {
+        "NO. WO": "1488",
+        "NAMA MATERIAL": "Joint Sleeve",
+        "SPESIFIKASI": "70mm",
+        "VOLUME": "3",
+        "KETERANGAN": "Pcs"
+      }
+    ],
+    "area": {
+      "NO. WO": "1488",
+      "AREA PEKERJAAN": "Aman",
+      "FOTO AREA": "",
+      "KONDISI TANAH": "Kering",
+      "FOTO TANAH": "",
+      "JARAK LOKASI-JALAN RAYA": "5 Meter"
+    },
+    "konstruksi": {
+      "NO. WO": "1488",
+      "SUTM": "SUTM Standar",
+      "FOTO SUTM": "",
+      "TIANG": "Tiang Beton 12m",
+      "FOTO TIANG": "",
+      "KONSTRUKSI": "Ada Tekep",
+      "FOTO KONSTRUKSI": ""
+    },
+    "hazards": [
+      {
+        "NO. WO": "1488",
+        "NAMA HAZARD": "Tegangan Menengah 20kV",
+        "KETERANGAN": "Dekat jaringan",
+        "POTENSI": "Sengatan listrik",
+        "RISIKO": "Tinggi",
+        "MITIGASI": "Gunakan APD & Blanket",
+        "FOTO HAZARD": ""
+      },
+      {
+        "NO. WO": "1488",
+        "NAMA HAZARD": "Lalu Lintas Ramai",
+        "KETERANGAN": "Pinggir jalan",
+        "POTENSI": "Tertabrak",
+        "RISIKO": "Sedang",
+        "MITIGASI": "Pasang rambu & traffic cone",
+        "FOTO HAZARD": ""
+      }
+    ],
+    "approval": {
+      "NO. WO": "1488",
+      "APPROVAL PREPARATOR": "Layak",
+      "KET PREPARATOR": "Siap dieksekusi",
+      "TANGGAL DIRENCANAKAN": "2026-09-25",
+      "PELAKSANA PDKB": "Tim PDKB Berjarak",
+      "PIC UNIT": "PARIA"
+    },
+    "approval_preparator": "Layak",
+    "ket_preparator": "Siap dieksekusi",
+    "tanggal_direncanakan": "2026-09-25",
+    "pelaksana_pdkb": "Tim PDKB Berjarak",
+    "pic_unit": "PARIA",
+    "updated_at": "2026-09-21T07:33:05.943Z"
+  }
+}

@@ -1,0 +1,44 @@
+[
+  {
+    "id": 1,
+    "tanggal_update": "22/05/2021",
+    "rp_per_kwh": 1115,
+    "pelanggan_total": 386897
+  },
+  {
+    "id": 2,
+    "tanggal_update": "23/05/2022",
+    "rp_per_kwh": 1115,
+    "pelanggan_total": 386897
+  },
+  {
+    "id": 3,
+    "tanggal_update": "24/05/2023",
+    "rp_per_kwh": 1115,
+    "pelanggan_total": 386897
+  },
+  {
+    "id": 4,
+    "tanggal_update": "25/05/2024",
+    "rp_per_kwh": 1115,
+    "pelanggan_total": 386897
+  },
+  {
+    "id": 5,
+    "tanggal_update": "26/05/2025",
+    "rp_per_kwh": 1115,
+    "pelanggan_total": 386897
+  },
+  {
+    "id": 6,
+    "tanggal_update": "27/05/2026",
+    "rp_per_kwh": 1115,
+    "pelanggan_total": 386897
+  },
+  {
+    "id": 7,
+    "tanggal_update": "15/06/2026",
+    "rp_per_kwh": 1120,
+    "pelanggan_total": 390182
+  }
+]

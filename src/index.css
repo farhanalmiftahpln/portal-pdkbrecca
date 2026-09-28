@@ -1,0 +1,90 @@
+@import "leaflet/dist/leaflet.css";
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #ff5e00;
+  --color-secondary: #0d8291;
+  --color-tertiary: #ffd000;
+  
+  --color-primary-dark: #cc4b00;
+  --color-secondary-dark: #0a6874;
+
+  --color-bg-base: #0a0f12;
+  --color-bg-surface: #0d161a;
+  --color-bg-surface-hover: #1a252b;
+}
+
+@layer base {
+  body {
+    @apply bg-[#0a0f12] text-white antialiased font-sans;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-content, #printable-content * {
+    visibility: visible;
+  }
+  #printable-content {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    color: black !important;
+  }
+  /* Remove backgrounds in print and make text black for readability */
+  #printable-content * {
+    background: white !important;
+    color: black !important;
+    border-color: #ddd !important;
+  }
+  .no-print, .no-print * {
+    display: none !important;
+  }
+}
+
+@layer utilities {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+  .animate-pulse-slow {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}
+
+
+@keyframes blob {
+  0% {
+    transform: translate(0px, 0px) scale(1);
+  }
+  33% {
+    transform: translate(30px, -50px) scale(1.1);
+  }
+  66% {
+    transform: translate(-20px, 20px) scale(0.9);
+  }
+  100% {
+    transform: translate(0px, 0px) scale(1);
+  }
+}
+.animate-blob {
+  animation: blob 7s infinite;
+}
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+.animation-delay-4000 {
+  animation-delay: 4s;
+}

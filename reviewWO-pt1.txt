@@ -1,0 +1,250 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuthStore } from '../store/useAuthStore';
+import { gasService } from '../services/gasService';
+import { 
+  ArrowLeft, CheckSquare, Wrench, Package, Map, Cpu, AlertTriangle, ShieldCheck, Plus, Trash2, Camera, ChevronDown, ChevronUp, RefreshCw
+} from 'lucide-react';
+import { cn, formatDate } from '../lib/utils';
+
+import PhotoEditor from '../components/PhotoEditor';
+import ImageZoomModal from '../components/ImageZoomModal';
+
+const getImageUrl = (url: string) => {
+  if (!url) return '';
+  if (url.includes('drive.google.com') || url.includes('docs.google.com')) {
+    const idMatch = url.match(/id=([^&]+)/) || url.match(/\/d\/(.*?)\//);
+    if (idMatch && idMatch[1]) {
+      return `https://lh3.googleusercontent.com/d/${idMatch[1]}`;
+    }
+  }
+  return url;
+};
+
+export default function ReviewWO() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const templateWoId = searchParams.get('woId');
+  const templateRowIndex = searchParams.get('index');
+  const templateNoWo = searchParams.get('noWo');
+  const { user } = useAuthStore();
+  
+  const [activeTab, setActiveTab] = useState('pekerjaan');
+  const [loading, setLoading] = useState(false);
+  const [isWoCollapsed, setIsWoCollapsed] = useState(true);
+
+  // Form State
+  const [pekerjaan, setPekerjaan] = useState({ sop: '', instruksi: '', detail: '' });
+  const [materials, setMaterials] = useState([{ nama: '', spesifikasi: '', volume: '', keterangan: '' }]);
+  const [area, setArea] = useState({ areaPekerjaan: '', fotoAreaBase64: '', kondisiTanah: '', fotoTanahBase64: '', jarakJalanRaya: '' });
+  const [konstruksi, setKonstruksi] = useState({ konstruksi1: '', konstruksi2: '', konstruksi3: '', fotoSutmBase64: '', fotoTiangBase64: '', fotoKonstruksiBase64: '' });
+  const [hazards, setHazards] = useState([{ nama: '', keterangan: '', potensi: '', risiko: '', mitigasi: '', foto: '' }]);
+  const [approval, setApproval] = useState({ status: 'Layak', keterangan: '', tanggalRencana: '' });
+
+  const [dropdownOptions, setDropdownOptions] = useState<any>({});
+  const [dropdownRaw, setDropdownRaw] = useState<any[]>([]);
+  const [warehouseMaterials, setWarehouseMaterials] = useState<any[]>([]);
+
+  // Photo editing state. Contains base64, plus a callback on how to apply the edit
+  const [photoToEdit, setPhotoToEdit] = useState<{ base64: string, applyId: string } | null>(null);
+
+  // List view state
+  const [reviewedWOs, setReviewedWOs] = useState<any[]>([]);
+  const [viewingDetail, setViewingDetail] = useState<any | null>(null);
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+  const viewDetailNoWo = searchParams.get('viewDetail');
+  const isListView = !templateNoWo;
+
+  useEffect(() => {
+    async function loadOptions() {
+      const res = await gasService.getOptions();
+      if (res.success && res.data) {
+        setDropdownOptions(res.data.dropdownData || {});
+        setDropdownRaw(res.data.dropdownRaw || []);
+      }
+      
+      try {
+        const matRes = await gasService.post('getWarehouseData', { sheetName: 'MATERIAL' });
+        if (matRes.success && matRes.data) {
+          setWarehouseMaterials(matRes.data);
+        }
+      } catch (e) {
+        console.error("Failed to load materials", e);
+      }
+    }
+    loadOptions();
+  }, []);
+
+  useEffect(() => {
+    if (isListView) {
+      setLoading(true);
+      gasService.post('getReviewedWOs').then(res => {
+        if (res.success) {
+          setReviewedWOs(res.data);
+          
+          if (viewDetailNoWo) {
+             const row = res.data.find((r: any) => String(r.noWo) === String(viewDetailNoWo));
+             if (row) {
+                gasService.post('getReviewDetail', { noWo: viewDetailNoWo }).then(detailRes => {
+                   if (detailRes.success) {
+                      setViewingDetail({ ...row, details: detailRes.data });
+                   }
+                });
+             }
+          }
+        }
+        setLoading(false);
+      });
+    } else {
+      // If we are editing/viewing an existing ReviewWO
+      setLoading(true);
+      gasService.post('getReviewDetail', { noWo: templateNoWo }).then(res => {
+        if (res.success && res.data) {
+          const detail = res.data;
+          
+          if (detail.pekerjaan && Object.keys(detail.pekerjaan).length > 0) {
+             setPekerjaan({
+               sop: detail.pekerjaan['SOP PEKERJAAN'] || '',
+               instruksi: detail.pekerjaan['INSTRUKSI KERJA'] || '',
+               detail: detail.pekerjaan['DETAIL PEKERJAAN'] || ''
+             });
+          }
+          if (detail.materials && detail.materials.length > 0) {
+             setMaterials(detail.materials.map((m: any) => ({
+               nama: m['NAMA MATERIAL'] || '',
+               spesifikasi: m['SPESIFIKASI'] || '',
+               volume: m['VOLUME'] || '',
+               keterangan: m['KETERANGAN'] || ''
+             })));
+          }
+          if (detail.area && Object.keys(detail.area).length > 0) {
+             setArea({
+               areaPekerjaan: detail.area['AREA PEKERJAAN'] || '',
+               fotoAreaBase64: getImageUrl(detail.area['FOTO AREA'] || ''),
+               kondisiTanah: detail.area['KONDISI TANAH'] || '',
+               fotoTanahBase64: getImageUrl(detail.area['FOTO TANAH'] || ''),
+               jarakJalanRaya: detail.area['JARAK LOKASI-JALAN RAYA'] || ''
+             });
+          }
+          if (detail.konstruksi && Object.keys(detail.konstruksi).length > 0) {
+             setKonstruksi({
+               konstruksi1: detail.konstruksi['SUTM'] || '',
+               fotoSutmBase64: getImageUrl(detail.konstruksi['FOTO SUTM'] || ''),
+               konstruksi2: detail.konstruksi['TIANG'] || '',
+               fotoTiangBase64: getImageUrl(detail.konstruksi['FOTO TIANG'] || ''),
+               konstruksi3: detail.konstruksi['KONSTRUKSI'] || '',
+               fotoKonstruksiBase64: getImageUrl(detail.konstruksi['FOTO KONSTRUKSI'] || '')
+             });
+          }
+          if (detail.hazards && detail.hazards.length > 0) {
+             setHazards(detail.hazards.map((h: any) => ({
+                nama: h['NAMA HAZARD'] || '',
+                keterangan: h['KETERANGAN'] || '',
+                potensi: h['POTENSI'] || '',
+                risiko: h['RISIKO'] || 'Rendah',
+                mitigasi: h['MITIGASI'] || '',
+                foto: getImageUrl(h['FOTO HAZARD'] || '')
+             })));
+          }
+          if (detail.approval && Object.keys(detail.approval).length > 0) {
+             let parsedDate = '';
+             let rawDate = detail.approval['TANGGAL DIRENCANAKAN'] || '';
+             if (rawDate) {
+                const strDate = String(rawDate).trim();
+                if (strDate.includes('-') && strDate.split('-')[0].length === 4) {
+                   parsedDate = strDate.split('T')[0];
+                } else if (strDate.includes('/')) {
+                   const parts = strDate.split('/');
+                   if (parts.length === 3 && parts[2].length === 4) {
+                      parsedDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                   }
+                } else {
+                   const d = new Date(strDate);
+                   if (!isNaN(d.getTime())) {
+                      const year = d.getFullYear();
+                      const month = String(d.getMonth() + 1).padStart(2, '0');
+                      const day = String(d.getDate()).padStart(2, '0');
+                      parsedDate = `${year}-${month}-${day}`;
+                   }
+                }
+             }
+             setApproval({
+               status: detail.approval['APPROVAL PREPARATOR'] || 'Menunggu Approval',
+               keterangan: detail.approval['KET PREPARATOR'] || '',
+               tanggalRencana: parsedDate
+             });
+          }
+        }
+        setLoading(false);
+      });
+    }
+  }, [isListView, templateNoWo]);
+
+  const handleViewDetail = async (wo: any) => {
+    setLoading(true);
+    const res = await gasService.post('getReviewDetail', { noWo: wo.noWo });
+    if (res.success && res.data) {
+      setViewingDetail({ ...wo, details: res.data });
+    }
+    setLoading(false);
+  };
+
+  const openCamera = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    return new Promise<string>((resolve) => {
+      input.onchange = (e: any) => {
+        const file = e.target.files?.[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+             const img = new Image();
+             img.onload = () => {
+                 const canvas = document.createElement('canvas');
+                 const MAX_WIDTH = 1000;
+                 const MAX_HEIGHT = 1000;
+                 let width = img.width;
+                 let height = img.height;
+
+                 if (width > height) {
+                     if (width > MAX_WIDTH) {
+                         height *= MAX_WIDTH / width;
+                         width = MAX_WIDTH;
+                     }
+                 } else {
+                     if (height > MAX_HEIGHT) {
+                         width *= MAX_HEIGHT / height;
+                         height = MAX_HEIGHT;
+                     }
+                 }
+                 canvas.width = width;
+                 canvas.height = height;
+                 const ctx = canvas.getContext('2d');
+                 ctx?.drawImage(img, 0, 0, width, height);
+                 resolve(canvas.toDataURL('image/jpeg', 0.7));
+             };
+             img.src = reader.result as string;
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+      input.click();
+    });
+  };
+
+  const handlePhotoUpload = async (applyId: string) => {
+    const base64 = await openCamera();
+    if (base64) {
+      setPhotoToEdit({ base64, applyId });
+    }
+  };
+
+  const applyPhotoEdit = (editedBase64: string) => {
+    if (!photoToEdit) return;
+    const { applyId } = photoToEdit;
+    if (applyId === 'area_area') setArea({ ...area, fotoAreaBase64: editedBase64 });
+    else if (applyId === 'area_tanah') setArea({ ...area, fotoTanahBase64: editedBase64 });
+    else if (applyId === 'konstruksi_sutm') setKonstruksi({ ...konstruksi, fotoSutmBase64: editedBase64 });
+    else if (applyId === 'konstruksi_tiang') setKonstruksi({ ...konstruksi, fotoTiangBase64: editedBase64 });
+    else if (applyId === 'konstruksi_lanjut') setKonstruksi({ ...konstruksi, fotoKonstruksiBase64: editedBase64 });

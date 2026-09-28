@@ -1,0 +1,432 @@
+      {isListView ? (
+        <main className="flex-1 max-w-5xl mx-auto w-full p-4 sm:p-6 flex flex-col gap-4">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold uppercase tracking-widest text-[#0d8291]">
+              {viewingDetail ? `Detail Review WO: ${viewingDetail.noWo}` : 'Daftar WO Direview'}
+            </h2>
+            {viewingDetail && (
+              <button
+                onClick={() => {
+                  setViewingDetail(null);
+                  navigate('/review-wo');
+                }}
+                className="text-xs uppercase font-bold tracking-widest text-gray-400 hover:text-white transition-colors"
+              >
+                Kembali ke Daftar
+              </button>
+            )}
+          </div>
+          
+          {loading ? (
+             <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+               <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin mb-4" />
+               <p className="text-xs uppercase font-bold tracking-widest">Memuat Data...</p>
+             </div>
+          ) : viewingDetail ? (
+             <div className="bg-[#0d161a] border border-white/5 rounded-xl text-white overflow-hidden shadow-2xl flex flex-col">
+                <div className="p-6 overflow-y-auto space-y-8 flex-1">
+                  
+                  {/* Work Order Info */}
+                  {viewingDetail.details?.workOrder && Object.keys(viewingDetail.details.workOrder).length > 0 && (
+                     <section className="relative rounded-xl overflow-hidden mb-6 bg-[#1a252b] border border-white/5 shadow-inner">
+                       <div 
+                         className="px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-[#202d33] transition-colors bg-[#151c21]"
+                         onClick={() => setIsWoCollapsed(!isWoCollapsed)}
+                       >
+                         <div className="flex items-center gap-3">
+                           <span className="font-bold text-sm tracking-widest text-[#0d8291] uppercase">Data Work Order Dasar (Eviden)</span>
+                           <span className="px-2 py-0.5 rounded bg-white/5 border border-white/10 text-gray-300 text-[10px] uppercase font-mono backdrop-blur shadow-sm">
+                             {viewingDetail.noWo}
+                           </span>
+                         </div>
+                         {isWoCollapsed ? <ChevronDown className="w-5 h-5 text-gray-400" /> : <ChevronUp className="w-5 h-5 text-gray-400" />}
+                       </div>
+                       
+                       {!isWoCollapsed && (
+                         <div className="border-t border-white/5">
+                           <div className="aspect-video sm:aspect-[3/1] relative group bg-black/50">
+                              {(()=>{
+                                const wo = viewingDetail.details.workOrder;
+                                const woKeys = Object.keys(wo);
+                                
+                                const fotoKey = woKeys.find(k => k.toLowerCase().includes('foto') || k.toLowerCase().includes('thumbnail') || k.toLowerCase().includes('gambar') || k.toLowerCase().includes('eviden'));
+                                const statusKey = woKeys.find(k => k.toLowerCase().includes('status'));
+                                const temuanKey = woKeys.find(k => k.toLowerCase().includes('temuan') || k.toLowerCase().includes('deskripsi'));
+
+                                const fotoUrl = fotoKey ? getImageUrl(wo[fotoKey]) : null;
+
+                                return (
+                                  <>
+                                    {fotoUrl ? (
+                                      <img src={fotoUrl} alt="WO" className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity" onClick={() => setZoomedImage(fotoUrl)} referrerPolicy="no-referrer" />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center text-white/20">
+                                        <Camera className="w-12 h-12" />
+                                      </div>
+                                    )}
+                                    <div className="absolute inset-0 bg-gradient-to-t from-[#0d161a] via-[#0d161a]/60 to-transparent pointer-events-none"></div>
+                                    <div className="absolute bottom-4 left-6 right-6 pointer-events-none">
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <span className="px-2 py-0.5 rounded border border-white/20 bg-black/50 text-[10px] uppercase tracking-widest font-bold backdrop-blur">
+                                          {statusKey ? wo[statusKey] : 'MENUNGGU'}
+                                        </span>
+                                      </div>
+                                      <h2 className="text-xl sm:text-2xl font-bold text-white leading-tight uppercase line-clamp-2">
+                                        {temuanKey ? wo[temuanKey] : 'Normal Assessment'}
+                                      </h2>
+                                    </div>
+                                  </>
+                                );
+                              })()}
+                           </div>
+                           
+                           {(()=>{
+                             const wo = viewingDetail.details.workOrder;
+                             const woKeys = Object.keys(wo);
+                             
+                             const tglKey = woKeys.find(k => k.toLowerCase().includes('tanggal') || k.toLowerCase().includes('tgl') || k.toLowerCase().includes('date'));
+                             const surveyorKey = woKeys.find(k => k.toLowerCase().includes('surveyor') || k.toLowerCase().includes('asisten'));
+                             const ulpKey = woKeys.find(k => k.toLowerCase().includes('ulp') || k.toLowerCase().includes('unit'));
+                             const giKey = woKeys.find(k => k.toLowerCase().includes('gardu induk') || k.toLowerCase().includes('gi'));
+                             const penyulangKey = woKeys.find(k => k.toLowerCase().includes('penyulang') || k.toLowerCase().includes('feeder'));
+                             const segmenKey = woKeys.find(k => k.toLowerCase().includes('segmen') || k.toLowerCase().includes('zona'));
+                             const alamatKey = woKeys.find(k => k.toLowerCase().includes('alamat') || k.toLowerCase().includes('lokasi'));
+                             const koordinatKey = woKeys.find(k => k.toLowerCase().includes('koordinat'));
+                             
+                             const prioritasKey = woKeys.find(k => k.toLowerCase().includes('prioritas'));
+                             const jenisTiangKey = woKeys.find(k => k.toLowerCase().includes('jenis tiang'));
+                             const ukuranTiangKey = woKeys.find(k => k.toLowerCase().includes('ukuran tiang'));
+                             const jenisKonduktorKey = woKeys.find(k => k.toLowerCase().includes('jenis konduktor'));
+                             const ukuranKonduktorKey = woKeys.find(k => k.toLowerCase().includes('ukuran konduktor'));
+                             const keypointKey = woKeys.find(k => k.toLowerCase().includes('keypoint'));
+                             const keteranganKey = woKeys.find(k => k.toLowerCase().includes('keterangan') || (k.toLowerCase() === 'ket' && !k.toLowerCase().includes('preparator')));
+
+                             const tglVal = tglKey ? wo[tglKey] : null;
+                             const formattedTgl = formatDate(tglVal);
+
+                             return (
+                               <div className="p-6 grid grid-cols-2 lg:grid-cols-4 gap-6 bg-[#0d161a]">
+                                  <div>
+                                    <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">Tanggal</div>
+                                    <div className="text-sm font-mono text-gray-200">{formattedTgl}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">Surveyor</div>
+                                    <div className="text-sm font-bold text-gray-200">{surveyorKey ? wo[surveyorKey] : '-'}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">Area ULP</div>
+                                    <div className="text-sm font-bold text-gray-200">{viewingDetail.ulp || (ulpKey ? wo[ulpKey] : '-')}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">Gardu Induk</div>
+                                    <div className="text-sm font-bold text-gray-200">{viewingDetail.gi || (giKey ? wo[giKey] : '-')}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">Penyulang</div>
+                                    <div className="text-sm font-bold text-gray-200">{viewingDetail.penyulang || (penyulangKey ? wo[penyulangKey] : '-')}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">Segmen / Zona</div>
+                                    <div className="text-sm font-bold text-gray-200">{viewingDetail.segmen || (segmenKey ? wo[segmenKey] : '-')}</div>
+                                  </div>
+                                  <div className="col-span-2">
+                                    <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-1 flex items-center gap-1"><Map className="w-3 h-3" /> Alamat / Koordinat</div>
+                                    <div className="text-sm text-gray-200 line-clamp-2">{viewingDetail.alamat || (alamatKey ? wo[alamatKey] : '-')}</div>
+                                    {koordinatKey && wo[koordinatKey] && (
+                                      <a 
+                                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(wo[koordinatKey])}`} 
+                                        target="_blank" 
+                                        rel="noreferrer" 
+                                        className="text-xs font-mono text-[#0d8291] font-bold hover:underline mt-1 inline-block"
+                                      >
+                                        {wo[koordinatKey]}
+                                      </a>
+                                    )}
+                                  </div>
+                                  
+                                  {/* Additional Asset Data that user showed in screenshot */}
+                                  <div>
+                                    <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">Skala Prioritas</div>
+                                    <div className="text-sm font-bold text-white">{prioritasKey ? wo[prioritasKey] : '-'}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">Jenis Tiang</div>
+                                    <div className="text-sm font-bold text-white">{jenisTiangKey ? wo[jenisTiangKey] : '-'}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">Ukuran Tiang</div>
+                                    <div className="text-sm font-bold text-white">{ukuranTiangKey ? wo[ukuranTiangKey] : '-'}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">Jenis Konduktor</div>
+                                    <div className="text-sm font-bold text-white">{jenisKonduktorKey ? wo[jenisKonduktorKey] : '-'}</div>
+                                  </div>
+                                  <div className="col-span-2 lg:col-span-1">
+                                    <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">Ukuran Konduktor</div>
+                                    <div className="text-sm font-bold text-white">{ukuranKonduktorKey ? wo[ukuranKonduktorKey] : '-'}</div>
+                                  </div>
+                                  <div className="col-span-2 lg:col-span-1">
+                                    <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">Keypoint</div>
+                                    <div className="text-sm font-bold text-white">{keypointKey ? wo[keypointKey] : '-'}</div>
+                                  </div>
+                                  <div className="col-span-2">
+                                    <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-1">Keterangan</div>
+                                    <div className="text-sm text-gray-300">{keteranganKey ? wo[keteranganKey] : '-'}</div>
+                                  </div>
+                               </div>
+                             );
+                           })()}
+                         </div>
+                       )}
+                     </section>
+                  )}
+
+                  {/* Approval */}
+                  <section>
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-primary border-b border-white/10 pb-2 mb-4">Keputusan Preparator</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Status</div>
+                        <div className={cn("text-xs font-bold uppercase", viewingDetail.details?.approval?.['APPROVAL PREPARATOR']?.toLowerCase().includes('tidak layak') ? 'text-red-400' : viewingDetail.details?.approval?.['APPROVAL PREPARATOR']?.toLowerCase().includes('layak') ? 'text-green-400' : 'text-yellow-400')}>
+                          {viewingDetail.details?.approval?.['APPROVAL PREPARATOR'] || '-'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Tanggal Direncanakan</div>
+                        <div className="text-xs font-mono">
+                          {formatDate(viewingDetail.details?.approval?.['TANGGAL DIRENCANAKAN'])}
+                        </div>
+                      </div>
+                      <div className="md:col-span-2">
+                        <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Keterangan</div>
+                        <div className="text-xs">{viewingDetail.details?.approval?.['KET PREPARATOR'] || '-'}</div>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Pekerjaan */}
+                  <section>
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-primary border-b border-white/10 pb-2 mb-4">Pekerjaan</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">SOP Pekerjaan</div>
+                        <div className="text-xs">{viewingDetail.details?.pekerjaan?.['SOP PEKERJAAN'] || '-'}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Instruksi Kerja (IK)</div>
+                        <div className="text-xs">{viewingDetail.details?.pekerjaan?.['INSTRUKSI KERJA'] || '-'}</div>
+                      </div>
+                      <div className="md:col-span-2">
+                        <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Detail Pekerjaan</div>
+                        <div className="text-xs whitespace-pre-wrap">{viewingDetail.details?.pekerjaan?.['DETAIL PEKERJAAN'] || '-'}</div>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Lokasi */}
+                  <section>
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-primary border-b border-white/10 pb-2 mb-4">Lokasi & Area Sekitar</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                      <div className="space-y-4">
+                        <div>
+                          <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Area Pekerjaan</div>
+                          <div className="text-xs">{viewingDetail.details?.area?.['AREA PEKERJAAN'] || '-'}</div>
+                        </div>
+                        {viewingDetail.details?.area?.['FOTO AREA'] && (
+                          <div className="mt-2">
+                            <div className="text-[10px] text-gray-500 uppercase font-bold mb-2">Foto Area</div>
+                            <img src={getImageUrl(viewingDetail.details.area['FOTO AREA'])} alt="Area" className="w-full h-32 object-cover rounded-lg border border-white/10 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setZoomedImage(getImageUrl(viewingDetail.details.area['FOTO AREA']))} referrerPolicy="no-referrer" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="space-y-4">
+                        <div>
+                          <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Kondisi Tanah</div>
+                          <div className="text-xs">{viewingDetail.details?.area?.['KONDISI TANAH'] || '-'}</div>
+                        </div>
+                        {viewingDetail.details?.area?.['FOTO TANAH'] && (
+                          <div className="mt-2">
+                            <div className="text-[10px] text-gray-500 uppercase font-bold mb-2">Foto Tanah</div>
+                            <img src={getImageUrl(viewingDetail.details.area['FOTO TANAH'])} alt="Tanah" className="w-full h-32 object-cover rounded-lg border border-white/10 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setZoomedImage(getImageUrl(viewingDetail.details.area['FOTO TANAH']))} referrerPolicy="no-referrer" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="space-y-4">
+                        <div>
+                          <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Jarak Lokasi - Jalan Raya</div>
+                          <div className="text-xs">{viewingDetail.details?.area?.['JARAK LOKASI-JALAN RAYA'] || '-'} Meter</div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Konstruksi */}
+                  <section>
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-primary border-b border-white/10 pb-2 mb-4">Kondisi Konstruksi</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                      <div className="space-y-4">
+                        <div>
+                          <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">SUTM</div>
+                          <div className="text-xs">{viewingDetail.details?.konstruksi?.['SUTM'] || '-'}</div>
+                        </div>
+                        {viewingDetail.details?.konstruksi?.['FOTO SUTM'] && (
+                          <div className="mt-2">
+                            <img src={getImageUrl(viewingDetail.details.konstruksi['FOTO SUTM'])} alt="SUTM" className="w-full h-32 object-cover rounded-lg border border-white/10 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setZoomedImage(getImageUrl(viewingDetail.details.konstruksi['FOTO SUTM']))} referrerPolicy="no-referrer" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="space-y-4">
+                        <div>
+                          <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Tiang</div>
+                          <div className="text-xs">{viewingDetail.details?.konstruksi?.['TIANG'] || '-'}</div>
+                        </div>
+                        {viewingDetail.details?.konstruksi?.['FOTO TIANG'] && (
+                          <div className="mt-2">
+                            <img src={getImageUrl(viewingDetail.details.konstruksi['FOTO TIANG'])} alt="Tiang" className="w-full h-32 object-cover rounded-lg border border-white/10 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setZoomedImage(getImageUrl(viewingDetail.details.konstruksi['FOTO TIANG']))} referrerPolicy="no-referrer" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="space-y-4">
+                        <div>
+                          <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Konstruksi Lanjut</div>
+                          <div className="text-xs">{viewingDetail.details?.konstruksi?.['KONSTRUKSI'] || '-'}</div>
+                        </div>
+                        {viewingDetail.details?.konstruksi?.['FOTO KONSTRUKSI'] && (
+                          <div className="mt-2">
+                            <img src={getImageUrl(viewingDetail.details.konstruksi['FOTO KONSTRUKSI'])} alt="Konstruksi" className="w-full h-32 object-cover rounded-lg border border-white/10 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setZoomedImage(getImageUrl(viewingDetail.details.konstruksi['FOTO KONSTRUKSI']))} referrerPolicy="no-referrer" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Materials */}
+                  <section>
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-primary border-b border-white/10 pb-2 mb-4">Material</h3>
+                    {viewingDetail.details?.materials && viewingDetail.details.materials.length > 0 ? (
+                      <div className="overflow-x-auto text-xs">
+                        <table className="w-full border-collapse">
+                          <thead>
+                            <tr className="border-b border-white/10 text-gray-500 text-left">
+                              <th className="py-2 pr-4 font-bold uppercase tracking-wider">Nama Material</th>
+                              <th className="py-2 pr-4 font-bold uppercase tracking-wider">Spesifikasi</th>
+                              <th className="py-2 pr-4 font-bold uppercase tracking-wider">Volume</th>
+                              <th className="py-2 font-bold uppercase tracking-wider">Keterangan</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {viewingDetail.details.materials.map((m: any, i: number) => (
+                              <tr key={i} className="border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
+                                <td className="py-3 pr-4">{m['NAMA MATERIAL']}</td>
+                                <td className="py-3 pr-4 text-gray-300">{m['SPESIFIKASI']}</td>
+                                <td className="py-3 pr-4 font-mono text-primary">{m['VOLUME']}</td>
+                                <td className="py-3 text-gray-400">{m['KETERANGAN']}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-gray-500">Tidak ada data material.</div>
+                    )}
+                  </section>
+
+                  {/* Hazards */}
+                  <section>
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-primary border-b border-white/10 pb-2 mb-4">Identifikasi Bahaya (Hazard)</h3>
+                    {viewingDetail.details?.hazards && viewingDetail.details.hazards.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {viewingDetail.details.hazards.map((h: any, i: number) => (
+                          <div key={i} className="bg-black/30 border border-white/10 rounded-lg p-4 space-y-3">
+                            <div className="flex gap-4">
+                              <div className="flex-1">
+                                <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Nama Hazard</div>
+                                <div className="text-xs font-semibold text-primary">{h['NAMA HAZARD'] || '-'}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Risiko</div>
+                                <div className={cn("text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider", h['RISIKO']?.toLowerCase() === 'tinggi' ? 'bg-red-500/20 text-red-400' : h['RISIKO']?.toLowerCase() === 'sedang' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-green-500/20 text-green-400')}>
+                                  {h['RISIKO'] || 'Rendah'}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-xs space-y-2">
+                              <div><span className="text-gray-500">Ket:</span> {h['KETERANGAN'] || '-'}</div>
+                              <div><span className="text-gray-500">Potensi:</span> {h['POTENSI'] || '-'}</div>
+                              <div><span className="text-gray-500">Mitigasi:</span> {h['MITIGASI'] || '-'}</div>
+                            </div>
+                            {h['FOTO HAZARD'] && (
+                              <div className="mt-3">
+                                <img src={getImageUrl(h['FOTO HAZARD'])} alt="Hazard" className="w-full h-32 object-cover rounded border border-white/10 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setZoomedImage(getImageUrl(h['FOTO HAZARD']))} referrerPolicy="no-referrer" />
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-gray-500">Tidak ada hazard teridentifikasi.</div>
+                    )}
+                  </section>
+
+                </div>
+                
+                {/* Actions Footer */}
+                <div className="p-4 bg-black/40 border-t border-white/10 flex justify-end">
+                   <button
+                     onClick={() => navigate(`/review-wo?woId=${viewingDetail.noWo}&noWo=${viewingDetail.noWo}&index=${viewingDetail.rowIndex}`)}
+                     className="px-6 py-2.5 bg-primary/20 text-primary border border-primary/50 font-bold text-xs uppercase tracking-widest rounded-lg hover:bg-primary hover:text-black transition-colors"
+                   >
+                     Edit Data Review
+                   </button>
+                </div>
+             </div>
+          ) : reviewedWOs.length === 0 ? (
+             <div className="flex flex-col items-center justify-center py-12 text-gray-500 bg-[#0d161a] border border-white/5 rounded-xl">
+               <CheckSquare className="w-12 h-12 mb-3 opacity-20" />
+               <p className="text-sm uppercase tracking-widest font-bold">Belum Ada WO Direview</p>
+             </div>
+          ) : (
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+               {reviewedWOs.map((wo: any, idx) => (
+                 <div
+                   key={idx}
+                   onClick={() => handleViewDetail(wo)}
+                   className="bg-[#0d161a] rounded-xl border border-white/5 overflow-hidden hover:border-primary/50 transition-colors cursor-pointer shadow-xl group flex flex-col"
+                 >
+                   {wo.foto && (
+                     <div className="aspect-video relative overflow-hidden bg-black/50 border-b border-white/5 shrink-0">
+                        <img src={getImageUrl(wo.foto)} alt="WO Eviden" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" referrerPolicy="no-referrer" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#0d161a] via-transparent to-transparent pointer-events-none opacity-50"></div>
+                     </div>
+                   )}
+                   <div className="p-4 border-b border-white/5 bg-gradient-to-br from-white/5 to-transparent flex justify-between items-start">
+                     <div>
+                       <div className="text-[10px] text-gray-400 uppercase tracking-widest mb-1 font-bold">NO. WORK ORDER</div>
+                       <div className="text-sm font-mono font-bold text-[#0d8291]">{wo.noWo}</div>
+                     </div>
+                   </div>
+                   <div className="p-4 space-y-3 flex-1">
+                     <div className="flex items-start gap-3">
+                       <Map className="w-4 h-4 text-gray-500 shrink-0 mt-0.5" />
+                       <div className="min-w-0">
+                         <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-0.5 font-bold">LOKASI</div>
+                         <div className="text-xs font-medium text-gray-300 truncate">{wo.ulp} - {wo.gi}</div>
+                         <div className="text-[10px] text-gray-400 truncate mt-0.5">{wo.penyulang} • {wo.segmen}</div>
+                       </div>
+                     </div>
+                     <div className="flex items-start gap-3">
+                       <CheckSquare className="w-4 h-4 text-gray-500 shrink-0 mt-0.5" />
+                       <div className="min-w-0">
+                         <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-0.5 font-bold">Keputusan Preparator</div>
+                         <div className={cn("text-xs font-semibold uppercase", wo.approvalPreparator?.toLowerCase().includes('tidak layak') ? 'text-red-400' : wo.approvalPreparator?.toLowerCase().includes('layak') ? 'text-green-400' : 'text-yellow-400')}>
+                           {wo.approvalPreparator || 'Menunggu'}
+                         </div>
+                       </div>
+                     </div>
+                   </div>
+                 </div>
+               ))}
+             </div>
+          )}
+        </main>

@@ -1,0 +1,496 @@
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="pb-6">
+                  {(() => {
+                    const index = activeTrackingStepIndex;
+                    const step = TRACKING_STEPS[index];
+                    if (!step) return null;
+
+                    const value = trackingData[step] || "";
+                    const isCompleted =
+                      value &&
+                      [
+                        "ON SITE",
+                        "SIAP DIMULAI",
+                        "PEKERJAAN SELESAI",
+                        "SELESAI",
+                        "DIBATALKAN",
+                        "PEKERJAAN DIHENTIKAN",
+                      ].includes(value.trim().toUpperCase());
+                    let prevValue =
+                      index === 0
+                        ? true
+                        : trackingData[TRACKING_STEPS[index - 1]];
+                    const isActive =
+                      index === 0
+                        ? true
+                        : !!(
+                            prevValue &&
+                            typeof prevValue === "string" &&
+                            [
+                              "ON SITE",
+                              "SIAP DIMULAI",
+                              "PEKERJAAN SELESAI",
+                              "SELESAI",
+                              "DIBATALKAN",
+                              "PEKERJAAN DIHENTIKAN",
+                            ].includes(prevValue.trim().toUpperCase())
+                          );
+
+                    if (!isActive) {
+                      return (
+                        <div className="text-[10px] text-gray-500 uppercase tracking-widest font-mono bg-black/10 border border-white/5 p-4 rounded-xl text-center">
+                          Menunggu langkah sebelumnya
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="bg-black/30 border border-white/5 p-4 rounded-xl flex flex-col gap-3">
+                              <div className="flex flex-col gap-1.5">
+                                {(trackingData[`${step}_START_TIME`] || trackingData[`${step}_END_TIME`]) && (
+                                  <div className="flex justify-end items-center mb-1">
+                                    <span className="text-[10px] font-mono tracking-wider text-gray-400 bg-black/20 px-2 py-1 rounded border border-white/5 flex items-center gap-1.5">
+                                      <Clock className="w-3 h-3 text-primary/70" />
+                                      {formatTime(trackingData[`${step}_START_TIME`])} - {formatTime(trackingData[`${step}_END_TIME`])}
+                                    </span>
+                                  </div>
+                                )}
+                                {value &&
+                                value.trim().toUpperCase() !== "WAITING" ? (
+                                  <div className="flex flex-col gap-2">
+                                    <div className="flex items-center justify-between bg-black/40 border border-white/10 p-3 rounded">
+                                      <div className="text-xs font-bold text-white">
+                                        {value}
+                                      </div>
+                                      {canUpdateProgress && (
+                                        <button
+                                          onClick={() => openStepModal(step, value)}
+                                          className="px-3 py-1.5 bg-white/5 text-white border border-white/10 text-[10px] font-bold uppercase tracking-widest rounded transition-colors hover:bg-white/10"
+                                        >
+                                          Update Progres
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {trackingData?.lampiranSteps?.["CL_" + step]?.[value] && (
+                                      <div className="flex flex-col gap-3 p-3 bg-black/20 border border-white/5 rounded-lg">
+                                        <div className="flex flex-wrap items-start gap-3">
+                                          {step === "PELAKSANAAN" && (value.trim().toUpperCase() === "PEKERJAAN SELESAI" || value.trim().toUpperCase() === "SELESAI") && trackingData?.lampiranPelaksanaan && (
+                                            <>
+                                              {trackingData.lampiranPelaksanaan.fotoSebelum && (
+                                                <div className="flex flex-col gap-1 w-24 shrink-0">
+                                                  <label className="text-[9px] uppercase font-bold text-gray-500 tracking-widest truncate">Sebelum</label>
+                                                  <img
+                                                    src={trackingData.lampiranPelaksanaan.fotoSebelum}
+                                                    alt="Sebelum"
+                                                    className="w-full h-24 object-cover rounded cursor-pointer border border-white/10 hover:opacity-80"
+                                                    onClick={() => setZoomedImage(trackingData.lampiranPelaksanaan.fotoSebelum)}
+                                                    referrerPolicy="no-referrer"
+                                                  />
+                                                </div>
+                                              )}
+                                              {trackingData.lampiranPelaksanaan.fotoProses1 && (
+                                                <div className="flex flex-col gap-1 w-24 shrink-0">
+                                                  <label className="text-[9px] uppercase font-bold text-gray-500 tracking-widest truncate">Proses 1</label>
+                                                  <img
+                                                    src={trackingData.lampiranPelaksanaan.fotoProses1}
+                                                    alt="Proses 1"
+                                                    className="w-full h-24 object-cover rounded cursor-pointer border border-white/10 hover:opacity-80"
+                                                    onClick={() => setZoomedImage(trackingData.lampiranPelaksanaan.fotoProses1)}
+                                                    referrerPolicy="no-referrer"
+                                                  />
+                                                </div>
+                                              )}
+                                              {trackingData.lampiranPelaksanaan.fotoProses2 && (
+                                                <div className="flex flex-col gap-1 w-24 shrink-0">
+                                                  <label className="text-[9px] uppercase font-bold text-gray-500 tracking-widest truncate">Proses 2</label>
+                                                  <img
+                                                    src={trackingData.lampiranPelaksanaan.fotoProses2}
+                                                    alt="Proses 2"
+                                                    className="w-full h-24 object-cover rounded cursor-pointer border border-white/10 hover:opacity-80"
+                                                    onClick={() => setZoomedImage(trackingData.lampiranPelaksanaan.fotoProses2)}
+                                                    referrerPolicy="no-referrer"
+                                                  />
+                                                </div>
+                                              )}
+                                            </>
+                                          )}
+
+                                          <div className="flex flex-col gap-1 w-24 shrink-0">
+                                            <label className="text-[9px] uppercase font-bold text-gray-500 tracking-widest truncate">
+                                              {step === "PELAKSANAAN" && (value.trim().toUpperCase() === "PEKERJAAN SELESAI" || value.trim().toUpperCase() === "SELESAI") ? "SELESAI" : "Foto Eviden"}
+                                            </label>
+                                            <img
+                                              src={trackingData.lampiranSteps["CL_" + step][value]}
+                                              alt="Eviden"
+                                              className="w-full h-24 object-cover rounded cursor-pointer border border-white/10 hover:opacity-80"
+                                              onClick={() => setZoomedImage(trackingData.lampiranSteps["CL_" + step][value])}
+                                              referrerPolicy="no-referrer"
+                                            />
+                                          </div>
+                                        </div>
+
+                                        {trackingData.lampiranSteps["CL_" + step]["Ket. " + value] && (
+                                          <div className="flex flex-col gap-1 w-full mt-1 border-t border-white/5 pt-2">
+                                            <label className="text-[9px] uppercase font-bold text-gray-500 tracking-widest">
+                                              Keterangan
+                                            </label>
+                                            <p className="text-[10px] text-gray-300 italic whitespace-pre-wrap">
+                                              "{trackingData.lampiranSteps["CL_" + step]["Ket. " + value]}"
+                                            </p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : canUpdateProgress ? (
+                                  <button
+                                    onClick={() => openStepModal(step, "")}
+                                    className="px-5 py-2.5 bg-white/5 text-white border border-white/10 text-[10px] font-bold uppercase tracking-widest rounded-lg transition-colors hover:bg-white/10 flex items-center justify-center gap-2"
+                                  >
+                                    Update Progres
+                                  </button>
+                                ) : (
+                                  <div className="text-[10px] text-gray-500 uppercase tracking-widest font-mono bg-black/10 border border-white/5 p-3 rounded-lg">
+                                    Belum diupdate
+                                  </div>
+                                )}
+                              </div>
+                              {isActive && step === "PELAKSANAAN" && value?.trim()?.toUpperCase() !== "PEKERJAAN SELESAI" && value?.trim()?.toUpperCase() !== "SELESAI" && (
+                                <div className="mt-2 bg-black/20 border border-white/5 rounded-xl p-4 flex flex-col gap-4">
+                                  <div className="text-[10px] uppercase font-bold text-gray-500 tracking-widest border-b border-white/5 pb-2">
+                                    Eviden Pelaksanaan
+                                  </div>
+
+                                  {(selectedPlanDetail["PROGRES"]
+                                    ?.trim()
+                                    ?.toUpperCase() === "SELESAI" ||
+                                    !canUpdateProgress) &&
+                                  trackingData?.lampiranPelaksanaan ? (
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                      {trackingData.lampiranPelaksanaan
+                                        .fotoSebelum && (
+                                        <div
+                                          className="flex flex-col gap-1.5 cursor-pointer hover:opacity-80 transition-opacity"
+                                          onClick={() =>
+                                            setZoomedImage(
+                                              trackingData.lampiranPelaksanaan
+                                                .fotoSebelum,
+                                            )
+                                          }
+                                        >
+                                          <label className="text-[10px] uppercase font-bold text-gray-400 tracking-widest">
+                                            Foto Sebelum
+                                          </label>
+                                          <img
+                                            src={
+                                              trackingData.lampiranPelaksanaan
+                                                .fotoSebelum
+                                            }
+                                            alt="Foto Sebelum"
+                                            className="w-full h-24 object-cover rounded-lg border border-white/10"
+                                            referrerPolicy="no-referrer"
+                                          />
+                                        </div>
+                                      )}
+                                      {trackingData.lampiranPelaksanaan
+                                        .fotoProses1 && (
+                                        <div
+                                          className="flex flex-col gap-1.5 cursor-pointer hover:opacity-80 transition-opacity"
+                                          onClick={() =>
+                                            setZoomedImage(
+                                              trackingData.lampiranPelaksanaan
+                                                .fotoProses1,
+                                            )
+                                          }
+                                        >
+                                          <label className="text-[10px] uppercase font-bold text-gray-400 tracking-widest">
+                                            Foto Proses 1
+                                          </label>
+                                          <img
+                                            src={
+                                              trackingData.lampiranPelaksanaan
+                                                .fotoProses1
+                                            }
+                                            alt="Foto Proses 1"
+                                            className="w-full h-24 object-cover rounded-lg border border-white/10"
+                                            referrerPolicy="no-referrer"
+                                          />
+                                        </div>
+                                      )}
+                                      {trackingData.lampiranPelaksanaan
+                                        .fotoProses2 && (
+                                        <div
+                                          className="flex flex-col gap-1.5 cursor-pointer hover:opacity-80 transition-opacity"
+                                          onClick={() =>
+                                            setZoomedImage(
+                                              trackingData.lampiranPelaksanaan
+                                                .fotoProses2,
+                                            )
+                                          }
+                                        >
+                                          <label className="text-[10px] uppercase font-bold text-gray-400 tracking-widest">
+                                            Foto Proses 2
+                                          </label>
+                                          <img
+                                            src={
+                                              trackingData.lampiranPelaksanaan
+                                                .fotoProses2
+                                            }
+                                            alt="Foto Proses 2"
+                                            className="w-full h-24 object-cover rounded-lg border border-white/10"
+                                            referrerPolicy="no-referrer"
+                                          />
+                                        </div>
+                                      )}
+                                      {!trackingData.lampiranPelaksanaan
+                                        .fotoSebelum &&
+                                        !trackingData.lampiranPelaksanaan
+                                          .fotoProses1 &&
+                                        !trackingData.lampiranPelaksanaan
+                                          .fotoProses2 && (
+                                          <div className="col-span-3 text-xs text-gray-500 italic pb-2">
+                                            Tidak ada foto lampiran.
+                                          </div>
+                                        )}
+                                    </div>
+                                  ) : canUpdateProgress ? (
+                                    <>
+                                      <div className="flex flex-col gap-1.5">
+                                        <label className="text-[10px] uppercase font-bold text-gray-400 tracking-widest">
+                                          Foto Sebelum
+                                        </label>
+                                        <label className="h-28 border-2 border-dashed border-white/10 rounded-lg p-2 flex flex-col items-center justify-center bg-[#1a252b]/50 hover:bg-[#1a252b] transition-colors cursor-pointer relative overflow-hidden group">
+                                          {stepInputFotoSebelum?.base64 ? (
+                                            <>
+                                              <img
+                                                src={
+                                                  stepInputFotoSebelum.base64
+                                                }
+                                                alt="Preview"
+                                                className="absolute inset-0 w-full h-full object-cover opacity-80"
+                                              />
+                                              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                                <span className="text-xs text-white uppercase font-bold tracking-widest">
+                                                  Ganti Foto
+                                                </span>
+                                              </div>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Camera className="w-5 h-5 text-gray-500 mb-2" />
+                                              <span className="text-[9px] text-gray-400 text-center px-2">
+                                                Klik untuk upload foto atau
+                                                ambil gambar
+                                              </span>
+                                            </>
+                                          )}
+                                          <input
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={(e) =>
+                                              handleFotoChange(e, "sebelum")
+                                            }
+                                            className="hidden"
+                                          />
+                                        </label>
+                                        {stepInputFotoSebelum && (
+                                          <div className="flex items-center justify-between px-1 mt-0.5">
+                                            <span className="text-[9px] text-green-400 font-mono flex items-center gap-1">
+                                              <CheckCircle2 className="w-3 h-3" />{" "}
+                                              Siap diunggah
+                                            </span>
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setStepInputFotoSebelum(null);
+                                              }}
+                                              className="text-[9px] text-red-500 hover:text-red-400 flex items-center gap-1"
+                                            >
+                                              <Trash2 className="w-3 h-3" />{" "}
+                                              Hapus
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="flex flex-col gap-1.5">
+                                        <label className="text-[10px] uppercase font-bold text-gray-400 tracking-widest">
+                                          Foto Proses 1
+                                        </label>
+                                        <label className="h-28 border-2 border-dashed border-white/10 rounded-lg p-2 flex flex-col items-center justify-center bg-[#1a252b]/50 hover:bg-[#1a252b] transition-colors cursor-pointer relative overflow-hidden group">
+                                          {stepInputFotoProses1?.base64 ? (
+                                            <>
+                                              <img
+                                                src={
+                                                  stepInputFotoProses1.base64
+                                                }
+                                                alt="Preview"
+                                                className="absolute inset-0 w-full h-full object-cover opacity-80"
+                                              />
+                                              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                                <span className="text-xs text-white uppercase font-bold tracking-widest">
+                                                  Ganti Foto
+                                                </span>
+                                              </div>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Camera className="w-5 h-5 text-gray-500 mb-2" />
+                                              <span className="text-[9px] text-gray-400 text-center px-2">
+                                                Klik untuk upload foto atau
+                                                ambil gambar
+                                              </span>
+                                            </>
+                                          )}
+                                          <input
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={(e) =>
+                                              handleFotoChange(e, "proses1")
+                                            }
+                                            className="hidden"
+                                          />
+                                        </label>
+                                        {stepInputFotoProses1 && (
+                                          <div className="flex items-center justify-between px-1 mt-0.5">
+                                            <span className="text-[9px] text-green-400 font-mono flex items-center gap-1">
+                                              <CheckCircle2 className="w-3 h-3" />{" "}
+                                              Siap diunggah
+                                            </span>
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setStepInputFotoProses1(null);
+                                              }}
+                                              className="text-[9px] text-red-500 hover:text-red-400 flex items-center gap-1"
+                                            >
+                                              <Trash2 className="w-3 h-3" />{" "}
+                                              Hapus
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="flex flex-col gap-1.5">
+                                        <label className="text-[10px] uppercase font-bold text-gray-400 tracking-widest">
+                                          Foto Proses 2
+                                        </label>
+                                        <label className="h-28 border-2 border-dashed border-white/10 rounded-lg p-2 flex flex-col items-center justify-center bg-[#1a252b]/50 hover:bg-[#1a252b] transition-colors cursor-pointer relative overflow-hidden group">
+                                          {stepInputFotoProses2?.base64 ? (
+                                            <>
+                                              <img
+                                                src={
+                                                  stepInputFotoProses2.base64
+                                                }
+                                                alt="Preview"
+                                                className="absolute inset-0 w-full h-full object-cover opacity-80"
+                                              />
+                                              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                                <span className="text-xs text-white uppercase font-bold tracking-widest">
+                                                  Ganti Foto
+                                                </span>
+                                              </div>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <Camera className="w-5 h-5 text-gray-500 mb-2" />
+                                              <span className="text-[9px] text-gray-400 text-center px-2">
+                                                Klik untuk upload foto atau
+                                                ambil gambar
+                                              </span>
+                                            </>
+                                          )}
+                                          <input
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={(e) =>
+                                              handleFotoChange(e, "proses2")
+                                            }
+                                            className="hidden"
+                                          />
+                                        </label>
+                                        {stepInputFotoProses2 && (
+                                          <div className="flex items-center justify-between px-1 mt-0.5">
+                                            <span className="text-[9px] text-green-400 font-mono flex items-center gap-1">
+                                              <CheckCircle2 className="w-3 h-3" />{" "}
+                                              Siap diunggah
+                                            </span>
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setStepInputFotoProses2(null);
+                                              }}
+                                              className="text-[9px] text-red-500 hover:text-red-400 flex items-center gap-1"
+                                            >
+                                              <Trash2 className="w-3 h-3" />{" "}
+                                              Hapus
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <button
+                                        disabled={
+                                          savingTracking ||
+                                          (!stepInputFotoSebelum &&
+                                            !stepInputFotoProses1 &&
+                                            !stepInputFotoProses2)
+                                        }
+                                        onClick={() =>
+                                          saveInlinePelaksanaanFotos(
+                                            selectedPlanDetail["NO. WO"] ||
+                                              selectedPlanDetail["NO WO"],
+                                            value || "",
+                                          )
+                                        }
+                                        className="mt-2 w-full px-4 py-3 bg-primary text-black rounded-lg text-[10px] font-bold uppercase tracking-widest hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+                                      >
+                                        {savingTracking
+                                          ? "Menyimpan Foto..."
+                                          : "Simpan Foto"}
+                                      </button>
+                                    </>
+                                  ) : null}
+                                </div>
+                              )}
+                            </div>
+                    );
+                  })()}
+
+                  <div className="mt-6 flex justify-between items-center">
+                    <button
+                      disabled={activeTrackingStepIndex === 0}
+                      onClick={() => setActiveTrackingStepIndex(Math.max(0, activeTrackingStepIndex - 1))}
+                      className="px-4 py-2 border border-white/20 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Kembali
+                    </button>
+                    <button
+                      disabled={
+                        activeTrackingStepIndex === TRACKING_STEPS.length - 1 ||
+                        !(() => {
+                           let prevValue = trackingData[TRACKING_STEPS[activeTrackingStepIndex]];
+                           return !!(
+                                prevValue &&
+                                typeof prevValue === "string" &&
+                                [
+                                  "ON SITE",
+                                  "SIAP DIMULAI",
+                                  "PEKERJAAN SELESAI",
+                                  "SELESAI",
+                                  "DIBATALKAN",
+                                  "PEKERJAAN DIHENTIKAN",
+                                ].includes(prevValue.trim().toUpperCase())
+                              );
+                        })()
+                      }
+                      onClick={() => setActiveTrackingStepIndex(Math.min(TRACKING_STEPS.length - 1, activeTrackingStepIndex + 1))}
+                      className="px-4 py-2 bg-primary/20 text-primary border border-primary/20 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-primary/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Lanjut
+                    </button>
+                  </div>
+                </div>
