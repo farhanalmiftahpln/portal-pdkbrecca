@@ -18,10 +18,10 @@ Sebelum memulai, pastikan Anda telah memiliki:
 
 Aplikasi ini sudah dilengkapi dengan konfigurasi otomatis:
 - **`vercel.json`**: Mengatur routing otomatis untuk Vercel:
-  - Route `/api/:match*` diarahkan ke Serverless Function Express (`api/index.ts`).
+  - Route `/api/:match*` diarahkan ke Serverless Function Express (`api/index`).
   - Route SPA `/:match*` diarahkan ke `index.html` (mencegah error 404 saat refresh halaman seperti `/work-order`, `/work-plan`, `/realisasi`, dll.).
   - Output directory build disetel ke `dist`.
-- **`api/index.ts`**: Entry point Vercel Serverless Function yang menjalankan backend Express (`server/app.ts`), menangani caching, Supabase Fast Read/Write, dan sinkronisasi Spreadsheet.
+- **`api/index.js`**: Entry point Vercel Serverless Function mandiri yang dibundel secara otomatis dari `server/vercelHandler.ts` via `esbuild`. Seluruh kode backend Express, Supabase client, dan GAS proxy sudah menyatu di dalamnya sehingga tidak membutuhkan ketergantungan folder eksternal di runtime Vercel.
 
 ---
 
