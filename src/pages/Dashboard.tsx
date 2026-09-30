@@ -15,6 +15,8 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
+const CARTO_API_KEY = "cb1_3pk7_1_c53bdd5348924d3c13faead4";
+
 // Auto-focus helper to automatically focus map view prioritizing PROSES EKSEKUSI > PLANNING > SELESAI
 function MapAutoFocus({ points }: { points: any[] }) {
   const map = useMap();
@@ -1566,8 +1568,8 @@ export default function Dashboard() {
                            <TileLayer
                               key={isDark ? 'dark-tiles' : 'light-tiles'}
                               url={isDark 
-                                 ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                                 : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+                                 ? `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?api_key=${CARTO_API_KEY}`
+                                 : `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?api_key=${CARTO_API_KEY}`
                               }
                               subdomains="abcd"
                               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
