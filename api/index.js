@@ -1033,7 +1033,11 @@ async function generateFilledSp2bSp3bGoogleDocPdf(data, customTemplateDocId) {
 
 // server/supabaseBackend.ts
 var gasDocumentAppSupported = null;
-var SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://iswgycclurbdxrnrxbvz.supabase.co";
+var rawSupabaseUrl = (process.env.VITE_SUPABASE_URL || "https://iswgycclurbdxrnrxbvz.supabase.co").trim();
+if (rawSupabaseUrl.endsWith(".supabase.c")) {
+  rawSupabaseUrl += "o";
+}
+var SUPABASE_URL = rawSupabaseUrl;
 var SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlzd2d5Y2NsdXJiZHhybnJ4YnZ6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MDkyMDMwNiwiZXhwIjoyMDk2NDk2MzA2fQ.mzX3UK9WASOrxoil0InLlZYfq5oViP3LYPMeUbtYfs8";
 var GAS_URL2 = process.env.VITE_GAS_WEB_APP_URL || "https://script.google.com/macros/s/AKfycbx_TinZ9UQ5_3U4Vmcd-sO509PztlKW5r8Ugt-cJZV6Eu6erYYwwkn2xXs_8z_XTDo6/exec";
 var GAS_LLC_URL = "https://script.google.com/macros/s/AKfycbwXj7bweuYbXEput0apRdJh0LoXQgNogb6ryXbDlftOBdwtKP7jjVafRqe4pQ0uY-s/exec";

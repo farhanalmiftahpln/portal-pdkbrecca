@@ -268,8 +268,9 @@ export const Guild: React.FC = () => {
                 <div className="w-full h-full relative z-0" style={{ minHeight: '0' }}>
                   <MapContainer center={[-6.200000, 106.816666]} zoom={11} className="w-full h-full bg-[#0a0f12] outline-none" zoomControl={false}>
                     <TileLayer
-                      url="https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png?api_key=cb1_3pk7_1_c53bdd5348924d3c13faead4"
-                      attribution='&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                      url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                      subdomains="abcd"
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
                     />
                     {(mapTab === 'Semua' || mapTab === 'Rencana') && (
                       <Marker position={[-6.21, 106.80]} icon={L.divIcon({ className: 'custom-pin', html: '<div class="w-3 h-3 md:w-4 md:h-4 bg-red-500 rounded-full border border-white shadow-[0_0_10px_rgba(239,68,68,0.8)] relative"><div class="absolute inset-0 bg-red-500 rounded-full animate-ping opacity-50"></div></div>', iconSize: [16, 16], iconAnchor: [8, 8] })} />
