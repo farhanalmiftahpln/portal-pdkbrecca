@@ -268,7 +268,7 @@ export const Guild: React.FC = () => {
                 <div className="w-full h-full relative z-0" style={{ minHeight: '0' }}>
                   <MapContainer center={[-6.200000, 106.816666]} zoom={11} className="w-full h-full bg-[#0a0f12] outline-none" zoomControl={false}>
                     <TileLayer
-                      url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?api_key=cb1_3pk7_1_c53bdd5348924d3c13faead4"
+                      url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=cb1_3pk7_2_e3a95b1d690c01f43736ae3c"
                       subdomains="abcd"
                       attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
                     />
