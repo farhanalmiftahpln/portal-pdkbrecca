@@ -97,11 +97,19 @@ export default function WorkOrder() {
     setLoading(true);
     const res = await gasService.post('getWorkOrders');
     if (res.success && res.data) {
-      const sorted = [...res.data].sort((a: any, b: any) => {
-        const numA = parseInt(String(a.noWo || a.id || '').replace(/\D/g, ''), 10) || 0;
-        const numB = parseInt(String(b.noWo || b.id || '').replace(/\D/g, ''), 10) || 0;
-        return numB - numA;
-      });
+      const sorted = [...res.data]
+        .filter((w: any) => {
+          const no = String(w.noWo || w.id || '').trim();
+          return !/\.(jpg|jpeg|png|webp|gif)$/i.test(no) && !no.toUpperCase().includes('.FOTO.');
+        })
+        .sort((a: any, b: any) => {
+          const getCleanNum = (val: any) => {
+            const s = String(val || '').trim();
+            const m = s.match(/^\d+/);
+            return m ? parseInt(m[0], 10) : (parseInt(s.replace(/\D/g, ''), 10) || 0);
+          };
+          return getCleanNum(b.noWo || b.id) - getCleanNum(a.noWo || a.id);
+        });
       setWos(sorted);
     } else {
       setWos([]);

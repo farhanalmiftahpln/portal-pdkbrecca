@@ -880,6 +880,48 @@ export default function Dashboard() {
     return items;
   }, [stats?.chartStatus, recentWOsArray, workOrders, noWoToSopMap, filters, targetWoYear]);
 
+  // Donut Chart data for Kategori Pekerjaan (Grid 7)
+  const chartKategoriData = useMemo(() => {
+    if (stats?.chartKategori && Array.isArray(stats.chartKategori) && stats.chartKategori.length > 0) {
+      return stats.chartKategori;
+    }
+
+    const sourceWp = workPlans.length > 0 ? workPlans : [];
+    const counts: Record<string, number> = {};
+    sourceWp.forEach((wp: any) => {
+      if (filters.ulp) {
+        const u = String(wp['ULP'] || wp['ulp'] || '');
+        if (!u.toLowerCase().includes(filters.ulp.toLowerCase())) return;
+      }
+      if (filters.gi) {
+        const g = String(wp['GARDU INDUK'] || wp['garduInduk'] || wp['gardu_induk'] || '');
+        if (!g.toLowerCase().includes(filters.gi.toLowerCase())) return;
+      }
+      if (filters.penyulang) {
+        const p = String(wp['PENYULANG'] || wp['penyulang'] || '');
+        if (!p.toLowerCase().includes(filters.penyulang.toLowerCase())) return;
+      }
+
+      const rawK = String(wp['KATEGORI'] || wp['kategori'] || 'PEMELIHARAAN').trim().toUpperCase();
+      const k = rawK.includes('NIAGA') ? 'NIAGA' : 'PEMELIHARAAN';
+      counts[k] = (counts[k] || 0) + 1;
+    });
+
+    const entries = Object.entries(counts);
+    if (entries.length === 0) {
+      return [
+        { name: 'PEMELIHARAAN', value: 908, fill: '#10b981' },
+        { name: 'NIAGA', value: 91, fill: '#0ea5e9' }
+      ];
+    }
+
+    return entries.map(([name, value]) => ({
+      name,
+      value,
+      fill: name === 'PEMELIHARAAN' ? '#10b981' : '#0ea5e9'
+    }));
+  }, [stats?.chartKategori, workPlans, filters.ulp, filters.gi, filters.penyulang]);
+
   // Custom Tooltip for Penyulang Composite Chart
   const renderPenyulangTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -1768,7 +1810,7 @@ export default function Dashboard() {
                      <ResponsiveContainer width="100%" height="100%">
                         <PieChart margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                            <Pie
-                              data={stats?.chartKategori || []}
+                              data={chartKategoriData}
                               cx="50%"
                               cy="50%"
                               innerRadius="45%"
@@ -1778,8 +1820,8 @@ export default function Dashboard() {
                               labelLine={false}
                               label={renderCustomizedLabel}
                            >
-                              {(stats?.chartKategori || []).map((entry: any, index: number) => (
-                                 <Cell key={`cell-${index}`} fill={['#10b981', '#f59e0b', '#0ea5e9', '#ef4444', '#8b5cf6'][index % 5]} />
+                              {chartKategoriData.map((entry: any, index: number) => (
+                                 <Cell key={`cell-${index}`} fill={entry.fill || (entry.name === 'PEMELIHARAAN' ? '#10b981' : '#0ea5e9')} />
                               ))}
                            </Pie>
                            <RechartsTooltip contentStyle={{ backgroundColor: isDark ? '#121c22' : '#ffffff', borderColor: isDark ? '#ffffff15' : '#e2e8f0', color: isDark ? '#ffffff' : '#1e293b', fontSize: '10px', borderRadius: '8px' }} />

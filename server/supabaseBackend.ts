@@ -776,7 +776,13 @@ export async function syncWorkOrdersFromSheets(): Promise<any> {
     const woRows = rawWOs
       .filter((w: any) => {
         const no = String(w.noWo || w.no_wo || w.id || '').trim();
-        return no && no !== '-' && no.toLowerCase() !== 'null';
+        if (!no || no === '-' || no.toLowerCase() === 'null') return false;
+        // Reject image filenames, photo records, and table headers
+        if (/\.(jpg|jpeg|png|webp|gif)$/i.test(no)) return false;
+        if (no.toLowerCase().includes('nama file') || no.toLowerCase().includes('direct link')) return false;
+        if (no.toUpperCase().includes('.FOTO.')) return false;
+        if (String(w.surveyor || '').includes('drive.google.com') && !w.ulp && !w.temuan) return false;
+        return true;
       })
       .map((w: any, idx: number) => {
         const noWoStr = String(w.noWo || w.no_wo || w.id || idx + 1).trim();
@@ -2032,11 +2038,18 @@ async function computeDashboardStats(filters: any = {}): Promise<any> {
     filterMonthNum = currentMonthNum;
   }
 
-  // Map WP no_wo to sop_pekerjaan for joining
+  // Map WP no_wo to sop_pekerjaan and kategori for joining
   const wpSopMap = new Map<string, string>();
+  const wpKategoriMap = new Map<string, string>();
   wps.forEach((wp: any) => {
-    if (wp.no_wo && wp.sop_pekerjaan) {
-      wpSopMap.set(String(wp.no_wo).trim(), wp.sop_pekerjaan);
+    if (wp.no_wo) {
+      const cleanNoWo = String(wp.no_wo).trim();
+      if (wp.sop_pekerjaan) {
+        wpSopMap.set(cleanNoWo, wp.sop_pekerjaan);
+      }
+      if (wp.kategori) {
+        wpKategoriMap.set(cleanNoWo, String(wp.kategori).trim().toUpperCase());
+      }
     }
   });
 
@@ -2098,6 +2111,7 @@ async function computeDashboardStats(filters: any = {}): Promise<any> {
   const ulpMap: Record<string, number> = {};
   const penyulangMap: Record<string, number> = {};
   const sopMap: Record<string, number> = {};
+  const kategoriMap: Record<string, number> = {};
 
   filteredRealisasi.forEach((r: any) => {
     savingKwh += Number(r.kwh_diselamatkan) || 0;
@@ -2110,6 +2124,10 @@ async function computeDashboardStats(filters: any = {}): Promise<any> {
 
     const sop = r.sop_pekerjaan || wpSopMap.get(String(r.no_wo || '').trim()) || 'LAINNYA';
     if (sop) sopMap[sop] = (sopMap[sop] || 0) + 1;
+
+    const rawKat = (r.kategori ? String(r.kategori).trim().toUpperCase() : null) || wpKategoriMap.get(String(r.no_wo || '').trim()) || 'PEMELIHARAAN';
+    const kat = rawKat.includes('NIAGA') ? 'NIAGA' : 'PEMELIHARAAN';
+    kategoriMap[kat] = (kategoriMap[kat] || 0) + 1;
   });
 
   // Calculate Targets
@@ -2143,6 +2161,28 @@ async function computeDashboardStats(filters: any = {}): Promise<any> {
   const ulpNames = Object.keys(ulpMap);
   const chartStatus = Object.entries(penyulangMap).map(([name, value]) => ({ name, value })).slice(0, 30);
   const chartSop = Object.entries(sopMap).map(([name, value]) => ({ name, value }));
+
+  // Compute chartKategori (Realisasi or fallback to Work Plans)
+  let chartKategori: Array<{ name: string; value: number; fill: string }> = [];
+  if (Object.keys(kategoriMap).length > 0) {
+    chartKategori = Object.entries(kategoriMap).map(([name, value]) => ({
+      name,
+      value,
+      fill: name === 'PEMELIHARAAN' ? '#10b981' : '#0ea5e9'
+    }));
+  } else {
+    const wpKatCount: Record<string, number> = {};
+    wps.forEach((wp: any) => {
+      const k = String(wp.kategori || 'PEMELIHARAAN').trim().toUpperCase();
+      const normK = k.includes('NIAGA') ? 'NIAGA' : 'PEMELIHARAAN';
+      wpKatCount[normK] = (wpKatCount[normK] || 0) + 1;
+    });
+    chartKategori = Object.entries(wpKatCount).map(([name, value]) => ({
+      name,
+      value,
+      fill: name === 'PEMELIHARAAN' ? '#10b981' : '#0ea5e9'
+    }));
+  }
 
   const monthNameUpper = filterMonthNum
     ? Object.keys(MONTH_NAMES_TO_NUM).find((k) => MONTH_NAMES_TO_NUM[k] === filterMonthNum && k.length > 3)
@@ -2189,6 +2229,7 @@ async function computeDashboardStats(filters: any = {}): Promise<any> {
     ulpNames,
     chartStatus,
     chartSop,
+    chartKategori,
     chartUlpTrend,
     recentWOs,
     filterOptions
@@ -2225,13 +2266,22 @@ export async function handleSupabaseRead(action: string, payload: any): Promise<
     }
 
     case 'getWorkOrders': {
-      const data = await fetchAllRows('work_orders', '*', 'id', true);
+      let data = await fetchAllRows('work_orders', '*', 'id', true);
 
-      // Urutkan Work Order seperti sebelumnya: nomor WO terbaru/terbesar di atas
+      // Filter out any non-WO rows or image files
+      data = data.filter((w: any) => {
+        const no = String(w.no_wo || '').trim();
+        return no && !/\.(jpg|jpeg|png|webp|gif)$/i.test(no) && !no.toUpperCase().includes('.FOTO.') && !no.toLowerCase().includes('nama file');
+      });
+
+      // Urutkan Work Order: nomor WO terbaru/terbesar di atas
       data.sort((a: any, b: any) => {
-        const numA = parseInt(String(a.no_wo || a.id).replace(/\D/g, ''), 10) || 0;
-        const numB = parseInt(String(b.no_wo || b.id).replace(/\D/g, ''), 10) || 0;
-        return numB - numA;
+        const getCleanNum = (val: any) => {
+          const s = String(val || '').trim();
+          const m = s.match(/^\d+/);
+          return m ? parseInt(m[0], 10) : (parseInt(s.replace(/\D/g, ''), 10) || 0);
+        };
+        return getCleanNum(b.no_wo || b.id) - getCleanNum(a.no_wo || a.id);
       });
 
       const formatted = data.map((w: any, idx: number) => ({
@@ -2246,6 +2296,7 @@ export async function handleSupabaseRead(action: string, payload: any): Promise<
         penyulang: w.penyulang || '',
         segmen: w.segmen || '',
         temuan: w.temuan || '',
+        kategori: w.kategori || 'PEMELIHARAAN',
         status: w.status || 'Menunggu Approval',
         alamat: w.alamat || '',
         koordinat: w.koordinat || '',
@@ -2278,15 +2329,22 @@ export async function handleSupabaseRead(action: string, payload: any): Promise<
     }
 
     case 'getReviewedWOs': {
-      const data = await fetchAllRows('work_orders', '*', 'id', true);
+      let data = await fetchAllRows('work_orders', '*', 'id', true);
+      data = data.filter((w: any) => {
+        const no = String(w.no_wo || '').trim();
+        return no && !/\.(jpg|jpeg|png|webp|gif)$/i.test(no) && !no.toUpperCase().includes('.FOTO.');
+      });
       const localDetails = readLocalReviewDetails();
       const filtered = data.filter((w) => w.approval_preparator || w.tanggal_rencanakan || localDetails[String(w.no_wo)]);
 
-      // Urutkan Review WO seperti sebelumnya: nomor WO terbaru/terbesar di atas
+      // Urutkan Review WO: nomor WO terbaru/terbesar di atas
       filtered.sort((a: any, b: any) => {
-        const numA = parseInt(String(a.no_wo || a.id).replace(/\D/g, ''), 10) || 0;
-        const numB = parseInt(String(b.no_wo || b.id).replace(/\D/g, ''), 10) || 0;
-        return numB - numA;
+        const getCleanNum = (val: any) => {
+          const s = String(val || '').trim();
+          const m = s.match(/^\d+/);
+          return m ? parseInt(m[0], 10) : (parseInt(s.replace(/\D/g, ''), 10) || 0);
+        };
+        return getCleanNum(b.no_wo || b.id) - getCleanNum(a.no_wo || a.id);
       });
 
       const formatted = filtered.map((w: any, idx: number) => {
@@ -2364,6 +2422,7 @@ export async function handleSupabaseRead(action: string, payload: any): Promise<
         'TEMUAN': wp.temuan,
         'ALAMAT': wp.alamat,
         'KATEGORI': wp.kategori,
+        kategori: wp.kategori || 'PEMELIHARAAN',
         'SKALA PRORITAS': wp.skala_prioritas,
         'TITIK KOORDINAT': wp.titik_koordinat,
         'JENIS TIANG': wp.jenis_tiang,
@@ -3533,7 +3592,7 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
             : `data:image/jpeg;base64,${payload.fotoBase64}`;
         }
 
-        const { error: woErr } = await supabaseAdmin.from('work_orders').upsert({
+        const woPayload: any = {
           id,
           no_wo: String(noWo),
           tanggal: tgl,
@@ -3556,8 +3615,16 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
           foto: fotoData || null,
           approval_asman: payload.approvalAsman || 'Menunggu',
           approval_tl: payload.approvalTl || 'Menunggu',
-          approval_preparator: payload.approvalPreparator || 'Menunggu'
-        }, { onConflict: 'no_wo' });
+          approval_preparator: payload.approvalPreparator || 'Menunggu',
+          kategori: payload.kategori || 'PEMELIHARAAN'
+        };
+
+        let { error: woErr } = await supabaseAdmin.from('work_orders').upsert(woPayload, { onConflict: 'no_wo' });
+        if (woErr && String(woErr.message).includes('kategori')) {
+          delete woPayload.kategori;
+          const retryRes = await supabaseAdmin.from('work_orders').upsert(woPayload, { onConflict: 'no_wo' });
+          woErr = retryRes.error;
+        }
 
         if (woErr) {
           console.error('[SUPABASE WRITE] submitWorkOrder error:', woErr.message);

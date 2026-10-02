@@ -9,7 +9,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "MANAJER UP3",
-    "updated_at": "2026-09-29T13:49:50.864Z"
+    "updated_at": "2026-10-02T01:47:56.463Z"
   },
   "2": {
     "user_id": "2",
@@ -21,7 +21,7 @@
     "pin": "123456",
     "status": "Pending",
     "jabatan": "K3L DAN KAM",
-    "updated_at": "2026-09-29T13:49:50.864Z"
+    "updated_at": "2026-10-02T01:47:56.463Z"
   },
   "4": {
     "user_id": "4",
@@ -33,7 +33,7 @@
     "pin": "123456",
     "status": "Pending",
     "jabatan": "MANAJER ULP",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.463Z"
   },
   "5": {
     "user_id": "5",
@@ -45,7 +45,7 @@
     "pin": "123456",
     "status": "Pending",
     "jabatan": "MANAJER ULP",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.463Z"
   },
   "Admin": {
     "user_id": "Admin",
@@ -69,7 +69,7 @@
     "pin": "123456",
     "status": "Pending",
     "jabatan": "ASMAN RING DAN KONS DIST",
-    "updated_at": "2026-09-29T13:49:50.864Z"
+    "updated_at": "2026-10-02T01:47:56.463Z"
   },
   "9115793ZY": {
     "user_id": "9115793ZY",
@@ -81,7 +81,7 @@
     "pin": "123456",
     "status": "Pending",
     "jabatan": "MANAJER ULP",
-    "updated_at": "2026-09-29T13:49:50.864Z"
+    "updated_at": "2026-10-02T01:47:56.463Z"
   },
   "8610591Z": {
     "user_id": "8610591Z",
@@ -93,7 +93,7 @@
     "pin": "123456",
     "status": "Pending",
     "jabatan": "MANAJER ULP",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.463Z"
   },
   "89151436ZY": {
     "user_id": "89151436ZY",
@@ -105,7 +105,7 @@
     "pin": "123456",
     "status": "Pending",
     "jabatan": "MANAJER ULP",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.463Z"
   },
   "8914046ZY": {
     "user_id": "8914046ZY",
@@ -117,7 +117,7 @@
     "pin": "123456",
     "status": "Pending",
     "jabatan": "MANAJER ULP",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.463Z"
   },
   "9110048F": {
     "user_id": "9110048F",
@@ -129,7 +129,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "PDKB",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.463Z"
   },
   "9716067FY": {
     "user_id": "9716067FY",
@@ -141,7 +141,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "PDKB",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.463Z"
   },
   "9817009FBY": {
     "user_id": "9817009FBY",
@@ -153,7 +153,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "PDKB",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.463Z"
   },
   "9817016FBY": {
     "user_id": "9817016FBY",
@@ -165,7 +165,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "PDKB",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "9718076FBY": {
     "user_id": "9718076FBY",
@@ -177,7 +177,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "PDKB",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "9618015FBY": {
     "user_id": "9618015FBY",
@@ -189,7 +189,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "PDKB",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "9818133FBY": {
     "user_id": "9818133FBY",
@@ -201,7 +201,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "PDKB",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "9717071FBY": {
     "user_id": "9717071FBY",
@@ -213,7 +213,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "PDKB",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "9212073FY": {
     "user_id": "9212073FY",
@@ -225,7 +225,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "TL TEKNIK",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "9213020FY": {
     "user_id": "9213020FY",
@@ -237,7 +237,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "TL TEKNIK",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "9419966ZY": {
     "user_id": "9419966ZY",
@@ -249,7 +249,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "TL TEKNIK",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "9413106FY": {
     "user_id": "9413106FY",
@@ -261,7 +261,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "TL TEKNIK",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "9413116FY": {
     "user_id": "9413116FY",
@@ -273,7 +273,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "TL TEKNIK",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "0021305ZY": {
     "user_id": "0021305ZY",
@@ -285,7 +285,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "STAFF TEKNIK",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "0022202ZY": {
     "user_id": "0022202ZY",
@@ -297,7 +297,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "STAFF TEKNIK",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "9718098FBY": {
     "user_id": "9718098FBY",
@@ -309,7 +309,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "STAFF TEKNIK",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "9921292ZY": {
     "user_id": "9921292ZY",
@@ -321,7 +321,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "STAFF TEKNIK",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "9718090FBY": {
     "user_id": "9718090FBY",
@@ -333,7 +333,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "STAFF TEKNIK",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "9718103FBY": {
     "user_id": "9718103FBY",
@@ -345,7 +345,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "STAFF TEKNIK",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "ROAMER": {
     "user_id": "ROAMER",
@@ -357,7 +357,7 @@
     "pin": "654321",
     "status": "Izinkan",
     "jabatan": "ROAMER",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "MS": {
     "user_id": "MS",
@@ -369,7 +369,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "BAKTI",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "MU": {
     "user_id": "MU",
@@ -381,7 +381,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "BAKTI",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "KDI": {
     "user_id": "KDI",
@@ -393,7 +393,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "BAKTI",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "MMJ": {
     "user_id": "MMJ",
@@ -405,7 +405,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "BAKTI",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "PRE": {
     "user_id": "PRE",
@@ -417,7 +417,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "BAKTI",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "PLP": {
     "user_id": "PLP",
@@ -429,7 +429,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "BAKTI",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "WTP": {
     "user_id": "WTP",
@@ -441,7 +441,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "BAKTI",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "BBU": {
     "user_id": "BBU",
@@ -453,7 +453,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "BAKTI",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "PRG": {
     "user_id": "PRG",
@@ -465,7 +465,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "BAKTI",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "SSTB": {
     "user_id": "SSTB",
@@ -477,7 +477,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "BAKTI",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "TEST_USER_99": {
     "user_id": "TEST_USER_99",
@@ -489,7 +489,7 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "",
-    "updated_at": "2026-09-29T13:49:50.865Z"
+    "updated_at": "2026-10-02T01:47:56.464Z"
   },
   "admin00": {
     "user_id": "admin00",
@@ -501,6 +501,6 @@
     "pin": "123456",
     "status": "Izinkan",
     "jabatan": "SISTEM",
-    "updated_at": "2026-09-29T13:49:50.864Z"
+    "updated_at": "2026-10-02T01:47:56.463Z"
   }
 }
