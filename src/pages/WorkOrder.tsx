@@ -10,7 +10,6 @@ import { cn, formatDate } from '../lib/utils';
 import { format } from 'date-fns';
 import PhotoEditor from '../components/PhotoEditor';
 import ImageZoomModal from '../components/ImageZoomModal';
-import { ExportWorkOrderModal } from '../components/export/ExportWorkOrderModal';
 
 const getImageUrl = (url: string) => {
   if (!url) return '';
@@ -33,7 +32,6 @@ export default function WorkOrder() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedWo, setSelectedWo] = useState<any>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
-  const [showExportWoModal, setShowExportWoModal] = useState(false);
   
   // Photo Editor State
   const [photoToEdit, setPhotoToEdit] = useState<string | null>(null);
@@ -385,25 +383,6 @@ export default function WorkOrder() {
           </div>
           
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                if (filteredWos.length > 0) {
-                  setSelectedWo(filteredWos[0]);
-                  setShowExportWoModal(true);
-                } else if (wos.length > 0) {
-                  setSelectedWo(wos[0]);
-                  setShowExportWoModal(true);
-                } else {
-                  alert('Belum ada data Work Order untuk diexport.');
-                }
-              }}
-              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 bg-primary/20 hover:bg-primary border border-primary/40 text-primary hover:text-black rounded text-xs font-bold uppercase tracking-widest transition-all shadow-lg shadow-primary/10"
-              title="Export dokumen resmi Work Order"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Export Work Order</span>
-            </button>
-
             <button 
               id="filter-btn"
               onClick={() => setShowFilters(!showFilters)}
@@ -522,20 +501,7 @@ export default function WorkOrder() {
                       </div>
                       <span className="text-[10px] text-gray-400 uppercase tracking-widest">{wo.surveyor || 'Surveyor'}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedWo(wo);
-                          setShowExportWoModal(true);
-                        }}
-                        className="flex items-center gap-1 px-2.5 py-1 bg-primary/15 hover:bg-primary text-primary hover:text-black border border-primary/30 rounded text-[10px] font-bold uppercase tracking-wider transition-all pointer-events-auto shadow-sm"
-                        title="Export dokumen Work Order ini"
-                      >
-                        <FileText className="w-3 h-3" />
-                        <span>Export WO</span>
-                      </button>
+                    <div className="flex items-center gap-1">
                       <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-primary transition-colors" />
                     </div>
                   </div>
@@ -864,27 +830,13 @@ export default function WorkOrder() {
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0d161a] to-transparent pointer-events-none"></div>
                 <div className="absolute bottom-4 left-6 right-6">
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className={cn("px-2 py-0.5 rounded border text-[10px] uppercase tracking-widest font-bold backdrop-blur", getStatusColor(selectedWo.status))}>
-                        {selectedWo.status}
-                      </span>
-                      <span className="px-2 py-0.5 rounded bg-black/50 text-white text-[10px] uppercase font-mono backdrop-blur cursor-pointer hover:bg-black/70">
-                        {selectedWo.noWo || selectedWo.id}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowExportWoModal(true);
-                      }}
-                      className="flex items-center gap-1.5 px-3 py-1 bg-primary hover:bg-primary-dark text-black text-xs font-bold uppercase tracking-wider rounded-lg shadow-lg shadow-primary/20 transition-all pointer-events-auto"
-                      title="Eksport dokumen resmi Work Order"
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                      <span>Export Berkas WO</span>
-                    </button>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={cn("px-2 py-0.5 rounded border text-[10px] uppercase tracking-widest font-bold backdrop-blur", getStatusColor(selectedWo.status))}>
+                      {selectedWo.status}
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-black/50 text-white text-[10px] uppercase font-mono backdrop-blur cursor-pointer hover:bg-black/70">
+                      {selectedWo.noWo || selectedWo.id}
+                    </span>
                   </div>
                   <h2 className="text-xl sm:text-2xl font-bold text-white leading-tight uppercase">{selectedWo.temuan || 'Normal Assessment'}</h2>
                 </div>
@@ -1025,25 +977,6 @@ export default function WorkOrder() {
                     <div className="text-xs text-gray-300">{selectedWo.ketPreparator || '-'}</div>
                   </div>
                 </div>
-
-                {/* Bottom Dedicated Action Footer */}
-                <div className="mt-6 pt-4 border-t border-white/10 flex items-center justify-between bg-white/[0.02] p-4 rounded-xl">
-                  <div>
-                    <span className="text-[10px] text-gray-500 uppercase font-bold tracking-widest block">Dokumen Resmi</span>
-                    <span className="text-xs text-gray-300 font-mono">Template: WORK_ORDER-{(selectedWo.noWo || selectedWo.id || '001')}.pdf</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowExportWoModal(true);
-                    }}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary-dark text-black rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg shadow-primary/25 transition-all"
-                  >
-                    <FileText className="w-4 h-4" />
-                    <span>Export Dokumen Work Order</span>
-                  </button>
-                </div>
               </div>
 
             </div>
@@ -1066,15 +999,6 @@ export default function WorkOrder() {
         imageUrl={zoomedImage} 
         onClose={() => setZoomedImage(null)} 
       />
-
-      {/* Export Work Order Modal */}
-      {selectedWo && (
-        <ExportWorkOrderModal
-          isOpen={showExportWoModal}
-          onClose={() => setShowExportWoModal(false)}
-          workOrder={selectedWo}
-        />
-      )}
 
       {/* LLC List Modal */}
       {isLlcModalOpen && (

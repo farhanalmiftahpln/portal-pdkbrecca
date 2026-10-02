@@ -2080,7 +2080,7 @@ export default function WorkPlan() {
                         <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-4">
                           <h3 className="text-sm font-bold uppercase tracking-widest text-primary">Dokumen & Pemberkasan</h3>
                           <span className="text-[11px] text-gray-400 font-medium">
-                            Klik komponen kartu untuk membuka formulir ekspor
+                            Klik kartu SIMPDKB untuk membuka formulir ekspor
                           </span>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -2093,12 +2093,13 @@ export default function WorkPlan() {
 
                             const isWoSimpdkb = key === "SP2B";
                             const isSpSimpdkb = key === "SP3B";
+                            const isClickable = isWoSimpdkb || isSpSimpdkb;
                             const displayLabel = isWoSimpdkb ? "WO SIMPDKB" : isSpSimpdkb ? "SP2B & SP3B SIMPDKB" : key;
 
                             const handleClick = () => {
                               if (isWoSimpdkb) {
                                 setShowExportWoModal(true);
-                              } else if (isSpSimpdkb || key === "WP") {
+                              } else if (isSpSimpdkb) {
                                 setShowExportSpModal(true);
                               }
                             };
@@ -2106,15 +2107,13 @@ export default function WorkPlan() {
                             return (
                               <div
                                 key={i}
-                                onClick={handleClick}
+                                onClick={isClickable ? handleClick : undefined}
                                 className={cn(
                                   "bg-black/20 border border-white/5 rounded-xl p-4 flex flex-col justify-between transition-all group",
                                   isWoSimpdkb
                                     ? "cursor-pointer hover:border-primary/50 hover:bg-primary/10 shadow-sm"
                                     : isSpSimpdkb
                                     ? "cursor-pointer hover:border-tertiary/50 hover:bg-tertiary/10 shadow-sm"
-                                    : key === "WP"
-                                    ? "cursor-pointer hover:border-white/20 hover:bg-white/5"
                                     : ""
                                 )}
                               >
