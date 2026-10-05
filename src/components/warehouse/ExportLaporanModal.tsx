@@ -35,11 +35,15 @@ const loadImageAsBase64 = (rawUrl: string): Promise<string | null> => {
   return new Promise((resolve) => {
     if (!rawUrl || typeof rawUrl !== 'string') return resolve(null);
     const trimmed = rawUrl.trim();
-    if (!trimmed) return resolve(null);
+    if (!trimmed || trimmed === '-' || trimmed.toUpperCase().startsWith('#') || trimmed.toLowerCase() === 'null') return resolve(null);
 
     // If already base64 data URI
     if (trimmed.startsWith('data:image/')) {
       return resolve(trimmed);
+    }
+
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      return resolve(null);
     }
 
     // Convert Google Drive view URL to direct content URL

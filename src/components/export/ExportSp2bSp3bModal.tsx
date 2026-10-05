@@ -66,6 +66,15 @@ const DEFAULT_SP_TEMPLATE_DOC_ID = '1kdpZFjeu356d-vF16ph9oZhuPKHZAueBdO3mDmr7lso
 const TARGET_DRIVE_FOLDER_ID = '1urqblbRHzJroJ5i8VjCIpb0iDkBrQNF6';
 const TARGET_DRIVE_FOLDER_URL = `https://drive.google.com/drive/folders/${TARGET_DRIVE_FOLDER_ID}?usp=sharing`;
 
+// Helper to format ADA / TIDAK ADA in clean uppercase
+function formatAdaTidakAda(val?: string): string {
+  if (!val) return 'TIDAK ADA';
+  const s = String(val).trim().toUpperCase();
+  if (s.includes('TIDAK') || s === 'NO' || s === 'NONE') return 'TIDAK ADA';
+  if (s.includes('ADA') || s === 'YA' || s === 'YES') return 'ADA';
+  return s;
+}
+
 export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
   isOpen,
   onClose,
@@ -80,9 +89,9 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
     return localStorage.getItem('pln_sp_template_doc_id') || DEFAULT_SP_TEMPLATE_DOC_ID;
   });
 
-  // Input fields
-  const [inputNoSp2b, setInputNoSp2b] = useState('001');
-  const [inputNoWo, setInputNoWo] = useState('001');
+  // Input fields (default empty / blank as requested)
+  const [inputNoSp2b, setInputNoSp2b] = useState('');
+  const [inputNoWo, setInputNoWo] = useState('');
   const [inputNoTiang, setInputNoTiang] = useState('');
   const [durasiPekerjaan, setDurasiPekerjaan] = useState('3'); // in hours
   const [tingkatKesulitan, setTingkatKesulitan] = useState<'MUDAH' | 'SEDANG' | 'SULIT'>('SEDANG');
@@ -109,20 +118,20 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
     const defaultArea = {
       kondisiTanah: 'Kering',
       jarakJalanRaya: '5 Meter',
-      opsiBangunan: 'Tidak Ada',
-      opsiPohon: 'Ada (Perlu Blanket / Isolasi)',
+      opsiBangunan: 'TIDAK ADA',
+      opsiPohon: 'ADA',
       opsiJalan: 'Perlu Rambu K3 & Traffic Cone'
     };
 
     if (!reviewWoDetail) return defaultArea;
 
-    const area = reviewWoDetail.area || {};
+    const area = reviewWoDetail.area || reviewWoDetail.details?.area || reviewWoDetail || {};
     return {
-      kondisiTanah: area['KONDISI TANAH'] || area.kondisiTanah || defaultArea.kondisiTanah,
-      jarakJalanRaya: area['JARAK LOKASI-JALAN RAYA'] || area.jarakJalanRaya || defaultArea.jarakJalanRaya,
-      opsiBangunan: area['OPSI BANGUNAN'] || area.opsiBangunan || defaultArea.opsiBangunan,
-      opsiPohon: area['OPSI POHON'] || area.opsiPohon || defaultArea.opsiPohon,
-      opsiJalan: area['OPSI JALAN'] || area.opsiJalan || defaultArea.opsiJalan
+      kondisiTanah: area['KONDISI TANAH'] || area.kondisiTanah || area.kondisi_tanah || defaultArea.kondisiTanah,
+      jarakJalanRaya: area['JARAK LOKASI-JALAN RAYA'] || area['JARAK LOKASI - JALAN RAYA'] || area.jarakJalanRaya || area.jarak_jalan_raya || defaultArea.jarakJalanRaya,
+      opsiBangunan: formatAdaTidakAda(area['OPSI BANGUNAN'] || area.opsiBangunan || area.opsi_bangunan),
+      opsiPohon: formatAdaTidakAda(area['OPSI POHON'] || area.opsiPohon || area.opsi_pohon),
+      opsiJalan: area['OPSI JALAN'] || area.opsiJalan || area.opsi_jalan || defaultArea.opsiJalan
     };
   }, [reviewWoDetail]);
 
@@ -130,11 +139,10 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
   useEffect(() => {
     if (!isOpen || !workPlan) return;
 
-    const rawWo = workPlan.noWo || workPlan.no_wo || workPlan.id;
-    const formattedWo = formatThreeDigitWo(rawWo);
-    setInputNoWo(formattedWo);
-    setInputNoSp2b(formattedWo);
-    setInputNoTiang(workPlan.noTiang || workPlan.no_tiang || workPlan.keypoint || '');
+    // Default input fields blank as requested by user
+    setInputNoWo('');
+    setInputNoSp2b('');
+    setInputNoTiang(workPlan.noTiang || workPlan['NO. TIANG'] || workPlan['NO TIANG'] || workPlan.no_tiang || workPlan.keypoint || workPlan['KEYPOINT'] || '');
 
     async function loadData() {
       setIsLoadingPersonil(true);
@@ -243,23 +251,23 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
   // Extracted variables
   const bulanRomawi = getRomanMonth();
   const tahunSaatIni = new Date().getFullYear().toString();
-  const instruksiKerja = workPlan.instruksi_kerja || workPlan.instruksi || workPlan.pekerjaan || 'PEMELIHARAAN JARINGAN DISTRIBUSI 20kV';
-  const jenisPekerjaan = instruksiKerja;
-  const tanggalDirencanakanRaw = workPlan.tanggal_direncanakan || workPlan.tanggal || new Date();
+  const instruksiKerja = workPlan.instruksi_kerja || workPlan['INSTRUKSI KERJA'] || workPlan.instruksi || workPlan['INSTRUKSI'] || workPlan.pekerjaan || workPlan['PEKERJAAN'] || workPlan.jenisPekerjaan || workPlan['JENIS PEKERJAAN'] || 'PEMELIHARAAN JARINGAN DISTRIBUSI 20kV';
+  const jenisPekerjaan = workPlan.jenis_pekerjaan || workPlan['JENIS PEKERJAAN'] || instruksiKerja;
+  const tanggalDirencanakanRaw = workPlan.tanggal_direncanakan || workPlan['TANGGAL DIRENCANAKAN'] || workPlan.tanggal || workPlan['TANGGAL'] || new Date();
   const tanggalDirencanakanFormatted = formatDateDDMMYYYY(tanggalDirencanakanRaw);
   const tanggalHMinus1 = calculateHMinus1(tanggalDirencanakanRaw);
 
-  const rawUlp = workPlan.ulp || 'WATAMPONE';
+  const rawUlp = workPlan.ulp || workPlan['ULP'] || 'WATAMPONE';
   const ulpFormatted = rawUlp.toUpperCase().startsWith('ULP') ? rawUlp : `ULP ${rawUlp}`;
-  const alamat = workPlan.alamat || '-';
-  const garduInduk = workPlan.gardu_induk || workPlan.garduInduk || '-';
-  const penyulang = workPlan.penyulang || '-';
-  const jenisTiang = workPlan.jenis_tiang || workPlan.jenisTiang || 'BETON';
-  const ukuranTiang = workPlan.ukuran_tiang || workPlan.ukuranTiang || '12';
-  const jenisKonduktor = workPlan.jenis_konduktor || workPlan.jenisKonduktor || 'AAAC-S';
-  const ukuranKonduktor = workPlan.ukuran_konduktor || workPlan.ukuranKonduktor || '150';
-  const fotoUrl = workPlan.foto_temuan || workPlan.foto || '';
-  const koordinat = workPlan.koordinat || '';
+  const alamat = workPlan.alamat || workPlan['ALAMAT'] || '-';
+  const garduInduk = workPlan.gardu_induk || workPlan.garduInduk || workPlan['GARDU INDUK'] || '-';
+  const penyulang = workPlan.penyulang || workPlan['PENYULANG'] || '-';
+  const jenisTiang = workPlan.jenis_tiang || workPlan.jenisTiang || workPlan['JENIS TIANG'] || 'BETON';
+  const ukuranTiang = workPlan.ukuran_tiang || workPlan.ukuranTiang || workPlan['UKURAN TIANG'] || '12';
+  const jenisKonduktor = workPlan.jenis_konduktor || workPlan.jenisKonduktor || workPlan['JENIS KONDUKTOR'] || 'AAAC-S';
+  const ukuranKonduktor = workPlan.ukuran_konduktor || workPlan.ukuranKonduktor || workPlan['UKURAN KONDUKTOR'] || '150';
+  const fotoUrl = workPlan.foto_temuan || workPlan['FOTO TEMUAN'] || workPlan.foto || workPlan['FOTO'] || '';
+  const koordinat = workPlan.titik_koordinat || workPlan['TITIK KOORDINAT'] || workPlan.koordinat || '';
 
   // Extract PP & PK3 from current table assignment
   const personPengawasPekerjaan = assignedPersonnel.find(p => p.tugas === 'PENGAWAS PEKERJAAN');
@@ -321,7 +329,8 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
     if (docType === 'SP2B') prefix = 'SP2B';
     if (docType === 'SP3B') prefix = 'SP3B';
 
-    const fileName = `${prefix}-${inputNoWo || '001'}.pdf`;
+    const cleanDateStr = tanggalDirencanakanFormatted.replace(/[\/\-\s]/g, '');
+    const fileName = inputNoWo ? `${prefix}-${inputNoWo}.pdf` : `${prefix}-${cleanDateStr}.pdf`;
 
     try {
       if (templateDocId) {
@@ -330,18 +339,18 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
 
       setExportProgress('Menghubungi Google Docs Template & me-replace placeholder SP2B/SP3B...');
 
-      const replacements: Record<string, string> = {
-        'INPUT NO. SP2B': inputNoSp2b || '001',
-        'INPUT NO. WO': inputNoWo || '001',
+      const rawEntries: Record<string, string> = {
+        'INPUT NO. SP2B': inputNoSp2b || '',
+        'INPUT NO. WO': inputNoWo || '',
         'BULAN': bulanRomawi,
         'TAHUN': tahunSaatIni,
         'tanggal_direncanakan': tanggalDirencanakanFormatted,
         'h-1.tanggal_direncanakan': tanggalHMinus1,
         'instruksi_kerja': instruksiKerja,
-        'jenis_pekerjaan': jenisPekerjaan,
+        'jenis_pekerjaan': instruksiKerja, // identik sesuai permintaan
         'ulp': ulpFormatted,
         'alamat': alamat,
-        'INPUT NO. TIANG': inputNoTiang || '-',
+        'INPUT NO. TIANG': inputNoTiang || '',
         'gardu_induk': garduInduk,
         'penyulang': penyulang,
         'jenis_tiang': jenisTiang,
@@ -354,8 +363,8 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
         'PERSONIL READY': `${personilReadyCount}`,
         'DURASI PEKERJAAN': `${durasiPekerjaan}`,
         'TINGKAT KESULITAN': tingkatKesulitan,
-        'OPSI BANGUNAN': areaData.opsiBangunan,
-        'OPSI POHON': areaData.opsiPohon,
+        'OPSI BANGUNAN': formatAdaTidakAda(areaData.opsiBangunan),
+        'OPSI POHON': formatAdaTidakAda(areaData.opsiPohon),
         'OPSI SIAP': opsiSiap,
         'OPSI JALAN': areaData.opsiJalan,
         'user_name.user_role=PREPARATOR': preparatorName,
@@ -370,18 +379,37 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
         'paraf_tlpdkb': ''
       };
 
-      // Add 10 Personil rows replacements
+      const replacements: Record<string, string> = {};
+      for (const [k, v] of Object.entries(rawEntries)) {
+        replacements[k] = v;
+        replacements[`{{${k}}}`] = v;
+        replacements[`[${k}]`] = v;
+      }
+
+      // Add 10 Personil rows replacements (nama_p, nip_p, no_sertifikat_p, tugas_p, ttd_p)
       for (let i = 1; i <= 10; i++) {
         const p = assignedPersonnel[i - 1];
-        if (p) {
-          replacements[`profil_p${i}`] = getProfilString(p);
-          replacements[`tugas_p${i}`] = p.tugas || 'LINEMAN';
-          replacements[`ttd_p${i}`] = '';
-        } else {
-          replacements[`profil_p${i}`] = '-';
-          replacements[`tugas_p${i}`] = '-';
-          replacements[`ttd_p${i}`] = '';
+        const nama = p?.nama || '';
+        const nip = p?.nip || '';
+        let cert = p?.noSerkomLv2 || '';
+        if (p && (p.tugas === 'PENGAWAS PEKERJAAN' || p.tugas === 'PENGAWAS K3')) {
+          cert = p.noSerkomLv3 || p.noSerkomLv2 || '';
         }
+        const tugas = p?.tugas || (p ? 'LINEMAN' : '');
+        const profil = p ? getProfilString(p) : '';
+
+        replacements[`nama_p${i}`] = nama;
+        replacements[`{{nama_p${i}}}`] = nama;
+        replacements[`nip_p${i}`] = nip;
+        replacements[`{{nip_p${i}}}`] = nip;
+        replacements[`no_sertifikat_p${i}`] = cert;
+        replacements[`{{no_sertifikat_p${i}}}`] = cert;
+        replacements[`tugas_p${i}`] = tugas;
+        replacements[`{{tugas_p${i}}}`] = tugas;
+        replacements[`ttd_p${i}`] = '';
+        replacements[`{{ttd_p${i}}}`] = '';
+        replacements[`profil_p${i}`] = profil;
+        replacements[`{{profil_p${i}}}`] = profil;
       }
 
       const imageReplacements: Record<string, string> = {
@@ -405,17 +433,17 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
         replacements,
         personnelList: personnelListForPayload,
         rawReplacements: {
-          inputNoSp2b: inputNoSp2b || '001',
-          inputNoWo: inputNoWo || '001',
+          inputNoSp2b: inputNoSp2b || '',
+          inputNoWo: inputNoWo || '',
           bulan: bulanRomawi,
           tahun: tahunSaatIni,
           tanggalDirencanakan: tanggalDirencanakanFormatted,
           tanggalHMinus1: tanggalHMinus1,
           instruksiKerja,
-          jenisPekerjaan,
+          jenisPekerjaan: instruksiKerja,
           ulp: ulpFormatted,
           alamat,
-          inputNoTiang: inputNoTiang || '-',
+          inputNoTiang: inputNoTiang || '',
           garduInduk,
           penyulang,
           jenisTiang,
@@ -456,131 +484,20 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
           downloadUrl: gDocRes.downloadUrl
         });
       } else {
-        console.warn('Apps Script template export error, fallback to local:', gDocRes?.error);
-        setExportProgress('Menyusun PDF fallback lokal...');
-
-        const personnelList: AssignedPersonRow[] = assignedPersonnel.map(p => ({
-          nama: p.nama,
-          nip: p.nip,
-          noSerkomLv2: p.noSerkomLv2,
-          noSerkomLv3: p.noSerkomLv3,
-          tugas: p.tugas
-        }));
-
-        const templateData: Sp2bSp3bPdfData = {
-          inputNoSp2b: inputNoSp2b || '001',
-          inputNoWo: inputNoWo || '001',
-          inputNoTiang: inputNoTiang || '-',
-          instruksiKerja,
-          jenisPekerjaan,
-          tanggalDirencanakan: tanggalDirencanakanRaw,
-          tanggalHMinus1,
-          ulp: ulpFormatted,
-          alamat,
-          garduInduk,
-          penyulang,
-          jenisTiang,
-          ukuranTiang,
-          jenisKonduktor,
-          ukuranKonduktor,
-          koordinat,
-          fotoUrl,
-          kondisiTanah: areaData.kondisiTanah,
-          jarakJalanRaya: areaData.jarakJalanRaya,
-          personilReady: personilReadyCount,
-          durasiPekerjaan,
-          tingkatKesulitan,
-          opsiBangunan: areaData.opsiBangunan,
-          opsiPohon: areaData.opsiPohon,
-          opsiSiap,
-          opsiJalan: areaData.opsiJalan,
-          preparatorName,
-          asmanName,
-          asmanBidang,
-          namaPP,
-          noLv3PP,
-          namaPK3,
-          noLv3PK3,
-          personnelList,
-          docType
-        };
-
-        const doc = await generateExactSp2bSp3bPdf(templateData);
-        doc.save(fileName);
-
-        const pdfBase64 = doc.output('datauristring');
-        await gasService.post('uploadFileToDrive', {
-          fileName,
-          fileBase64: pdfBase64,
-          mimeType: 'application/pdf',
-          folderId: TARGET_DRIVE_FOLDER_ID
-        });
-
+        console.warn('Apps Script template export error:', gDocRes?.error);
+        const errMsg = gDocRes?.message || gDocRes?.error || 'Gagal mengekspor dari Google Docs Template resmi.';
         setExportResult({
-          success: true,
-          message: `Dokumen "${fileName}" berhasil diunduh ke perangkat Anda.`
+          success: false,
+          message: errMsg
         });
       }
 
     } catch (err: any) {
       console.error('Export error:', err);
-      try {
-        const personnelList: AssignedPersonRow[] = assignedPersonnel.map(p => ({
-          nama: p.nama,
-          nip: p.nip,
-          noSerkomLv2: p.noSerkomLv2,
-          noSerkomLv3: p.noSerkomLv3,
-          tugas: p.tugas
-        }));
-
-        const doc = await generateExactSp2bSp3bPdf({
-          inputNoSp2b: inputNoSp2b || '001',
-          inputNoWo: inputNoWo || '001',
-          inputNoTiang: inputNoTiang || '-',
-          instruksiKerja,
-          jenisPekerjaan,
-          tanggalDirencanakan: tanggalDirencanakanRaw,
-          tanggalHMinus1,
-          ulp: ulpFormatted,
-          alamat,
-          garduInduk,
-          penyulang,
-          jenisTiang,
-          ukuranTiang,
-          jenisKonduktor,
-          ukuranKonduktor,
-          koordinat,
-          fotoUrl,
-          kondisiTanah: areaData.kondisiTanah,
-          jarakJalanRaya: areaData.jarakJalanRaya,
-          personilReady: personilReadyCount,
-          durasiPekerjaan,
-          tingkatKesulitan,
-          opsiBangunan: areaData.opsiBangunan,
-          opsiPohon: areaData.opsiPohon,
-          opsiSiap,
-          opsiJalan: areaData.opsiJalan,
-          preparatorName,
-          asmanName,
-          asmanBidang,
-          namaPP,
-          noLv3PP,
-          namaPK3,
-          noLv3PK3,
-          personnelList,
-          docType
-        });
-        doc.save(fileName);
-        setExportResult({
-          success: true,
-          message: `Dokumen "${fileName}" berhasil diunduh ke komputer Anda.`
-        });
-      } catch (e2) {
-        setExportResult({
-          success: false,
-          message: `Terjadi kendala saat export: ${err.message || 'Gagal'}`
-        });
-      }
+      setExportResult({
+        success: false,
+        message: `Terjadi kendala saat export dari Google Docs Template: ${err.message || 'Gagal memproses template'}`
+      });
     } finally {
       setIsExporting(false);
       setExportProgress('');
@@ -598,15 +515,8 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
               <FileCheck2 className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] uppercase font-bold tracking-widest bg-tertiary/20 text-tertiary px-2 py-0.5 rounded border border-tertiary/30">
-                  GOOGLE DOCS TEMPLATE EXPORT
-                </span>
-                <span className="text-gray-500">•</span>
-                <span className="text-xs text-gray-400 font-mono">Presisi Header, Footer & Tabel 6 Halaman</span>
-              </div>
-              <h2 className="text-base sm:text-lg font-bold text-white uppercase tracking-wider mt-0.5">
-                Dokumen SP2B & SP3B (Template Google Docs)
+              <h2 className="text-base sm:text-lg font-bold text-white uppercase tracking-wider">
+                Dokumen SP2B & SP3B
               </h2>
             </div>
           </div>
@@ -658,50 +568,6 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
             </div>
           )}
 
-          {/* Config Box: Google Docs Template & Google Drive Folder */}
-          <div className="bg-[#121c21] border border-tertiary/20 rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-tertiary uppercase tracking-wider flex items-center gap-2">
-                <FileText className="w-4 h-4" />
-                Template Google Docs Master Terhubung
-              </span>
-              <a 
-                href={`https://docs.google.com/document/d/${templateDocId}/edit`}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-tertiary hover:underline flex items-center gap-1 font-semibold"
-              >
-                <span>Buka Master Template SP2B/SP3B</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div>
-                <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1">
-                  ID Template SP2B & SP3B (Google Docs)
-                </label>
-                <input
-                  type="text"
-                  value={templateDocId}
-                  onChange={(e) => setTemplateDocId(e.target.value)}
-                  className="w-full bg-black/50 border border-white/15 focus:border-tertiary rounded-lg px-3 py-2 text-white font-mono text-xs outline-none"
-                  placeholder="ID File Google Docs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1">
-                  Target Folder Google Drive
-                </label>
-                <div className="flex items-center gap-2 bg-black/50 border border-white/15 rounded-lg px-3 py-2 text-gray-300 font-mono text-xs">
-                  <FolderOpen className="w-3.5 h-3.5 text-tertiary shrink-0" />
-                  <span className="truncate">{TARGET_DRIVE_FOLDER_ID}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
           {/* Section 1: Parameter Input */}
           <div className="bg-white/5 border border-white/10 rounded-xl p-4 sm:p-5 space-y-4">
             <h3 className="text-xs font-bold uppercase tracking-widest text-primary flex items-center gap-2">
@@ -712,7 +578,7 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
               
               <div>
                 <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1.5">
-                  [INPUT NO. SP2B] <span className="text-primary font-mono">(3 Digit)</span>
+                  NO. SP2B-SP3B SIMPDKB <span className="text-primary font-mono">(3 Digit)</span>
                 </label>
                 <input
                   type="text"
@@ -726,7 +592,7 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
 
               <div>
                 <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1.5">
-                  [INPUT NO. WO]
+                  NO. WO SIMPDKB
                 </label>
                 <input
                   type="text"
@@ -739,7 +605,7 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
 
               <div>
                 <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1.5">
-                  [INPUT NO. TIANG]
+                  NO. TIANG
                 </label>
                 <input
                   type="text"
@@ -752,7 +618,7 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
 
               <div>
                 <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1.5">
-                  [DURASI PEKERJAAN] <span className="text-gray-500 font-normal">(Jam)</span>
+                  DURASI PEKERJAAN <span className="text-gray-500 font-normal">(Jam)</span>
                 </label>
                 <input
                   type="text"
@@ -768,7 +634,7 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-white/5">
               <div>
                 <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1.5">
-                  [TINGKAT KESULITAN]
+                  TINGKAT KESULITAN
                 </label>
                 <select
                   value={tingkatKesulitan}
@@ -783,7 +649,7 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
 
               <div>
                 <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider mb-1.5">
-                  [OPSI SIAP] (Dikerjakan dengan PDKB-TM)
+                  KESIAPAN TIM
                 </label>
                 <select
                   value={opsiSiap}
@@ -803,11 +669,8 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-widest text-primary flex items-center gap-2">
                   <Users className="w-4 h-4" />
-                  2. Penugasan 10 Personil ([profil_p1] s/d [profil_p10])
+                  2. Penugasan Personil
                 </h3>
-                <p className="text-[11px] text-gray-400 mt-0.5">
-                  Di-replace ke Google Docs: <code className="text-primary font-mono">[Nama]-[NIP] (No Sertifikat: [No])</code>.
-                </p>
               </div>
               <div className="text-xs font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded self-start sm:self-auto">
                 Ready: {personilReadyCount} / {totalActivePersonnel} Aktif
@@ -865,21 +728,6 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
                 </table>
               </div>
             )}
-
-            {/* Extracted Pengawas Summary */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 pt-3 border-t border-white/10 text-xs">
-              <div className="p-2.5 rounded bg-primary/10 border border-primary/20">
-                <span className="text-[10px] text-primary uppercase font-bold block">[nama_pp] & [no_lv3_pp]</span>
-                <span className="font-bold text-white">{namaPP}</span>
-                <span className="text-gray-400 block font-mono text-[10px]">No Serkom Lv.3: {noLv3PP}</span>
-              </div>
-              <div className="p-2.5 rounded bg-tertiary/10 border border-tertiary/20">
-                <span className="text-[10px] text-tertiary uppercase font-bold block">[nama_pk3] & [no_lv3_pk3]</span>
-                <span className="font-bold text-white">{namaPK3}</span>
-                <span className="text-gray-400 block font-mono text-[10px]">No Serkom Lv.3: {noLv3PK3}</span>
-              </div>
-            </div>
-
           </div>
 
           {/* Section 3: Pejabat Pengesahan */}
@@ -888,38 +736,27 @@ export const ExportSp2bSp3bModal: React.FC<ExportSp2bSp3bModalProps> = ({
               <UserCheck className="w-4 h-4 text-primary" />
               3. Pejabat Pengesahan Dokumen
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-                  [user_name.user_role=PREPARATOR]
+                  PREPARATOR
                 </label>
                 <input
                   type="text"
                   value={preparatorName}
                   onChange={(e) => setPreparatorName(e.target.value)}
-                  className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-bold"
+                  className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-bold focus:outline-none focus:border-primary"
                 />
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-                  [user_name.user_role=ASMAN]
+                  KEPALA OPERASI
                 </label>
                 <input
                   type="text"
                   value={asmanName}
                   onChange={(e) => setAsmanName(e.target.value)}
-                  className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-bold"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-                  [user_bidang.user_role=ASMAN]
-                </label>
-                <input
-                  type="text"
-                  value={asmanBidang}
-                  onChange={(e) => setAsmanBidang(e.target.value)}
-                  className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-bold"
+                  className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-bold focus:outline-none focus:border-primary"
                 />
               </div>
             </div>

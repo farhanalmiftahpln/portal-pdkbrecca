@@ -1605,10 +1605,26 @@ function handleSubmitReviewForm(payload) {
   // 1. Update Preparator Approval in WorkOrders is deliberately skipped so it only updates APPROVAL REVIEW sheet.
   // Code block removed as per user request.
 
-  // 1.5. Clean up existing rows for this WO to prevent duplication on edit
-  deleteRowsByNoWo(reviewWoSS.getSheetByName("KON_SEKITAR"), noWo);
-  deleteRowsByNoWo(reviewWoSS.getSheetByName("KON_KONSTRUKSI"), noWo);
-  deleteRowsByNoWo(reviewWoSS.getSheetByName("PEKERJAAN"), noWo);
+  // Helper untuk mencari baris berdasarkan NO. WO
+  function findRowIndexByNoWo(sheet, targetNoWo) {
+    if (!sheet || !targetNoWo) return -1;
+    const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return -1;
+    const headers = data[0].map(h => h ? h.toString().toUpperCase().trim() : "");
+    let noWoColIdx = headers.indexOf("NO. WO");
+    if (noWoColIdx === -1) noWoColIdx = 0; // Default kolom A
+    
+    const target = String(targetNoWo).trim().toLowerCase();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][noWoColIdx]).trim().toLowerCase() === target) {
+        return i + 1; // 1-based index untuk Google Sheets Range
+      }
+    }
+    return -1;
+  }
+
+  // 1.5. Clean up existing rows HANYA untuk sheet list berulang (MATERIAL dan HAZARD)
+  // Sheet KON_SEKITAR, KON_KONSTRUKSI, dan PEKERJAAN TIDAK DIHAPUS agar rumus/formula di kolom NO. WO tetap utuh
   deleteRowsByNoWo(reviewWoSS.getSheetByName("MATERIAL"), noWo);
   deleteRowsByNoWo(reviewWoSS.getSheetByName("HAZARD"), noWo);
 
@@ -1632,18 +1648,37 @@ function handleSubmitReviewForm(payload) {
     urlFotoTanah = res ? "https://lh3.googleusercontent.com/d/" + res.id : "";
   }
 
-  // 3. Save to KON_SEKITAR
+  // 3. Save to KON_SEKITAR: Cari NO. WO lalu isi kolom lainnya tanpa menimpa NO. WO
   const sheetSekitar = reviewWoSS.getSheetByName("KON_SEKITAR");
   if (sheetSekitar && area) {
-    // A: noWo, B: area, C: foto, D: tanah, E: foto tanah, F: jarak
-    sheetSekitar.appendRow([
-      noWo,
-      area.areaPekerjaan || "",
-      urlFotoArea,
-      area.kondisiTanah || "",
-      urlFotoTanah,
-      area.jarakJalanRaya || "",
-    ]);
+    const rIdx = findRowIndexByNoWo(sheetSekitar, noWo);
+    const dataSekitar = sheetSekitar.getDataRange().getValues();
+    const headersSekitar = (dataSekitar[0] || []).map(h => h ? h.toString().toUpperCase().trim() : "");
+    const noWoCol = headersSekitar.indexOf("NO. WO") > -1 ? headersSekitar.indexOf("NO. WO") + 1 : 1;
+    const colArea = headersSekitar.indexOf("AREA PEKERJAAN") > -1 ? headersSekitar.indexOf("AREA PEKERJAAN") + 1 : 2;
+    const colFotoArea = headersSekitar.indexOf("FOTO AREA") > -1 ? headersSekitar.indexOf("FOTO AREA") + 1 : 3;
+    const colTanah = headersSekitar.indexOf("KONDISI TANAH") > -1 ? headersSekitar.indexOf("KONDISI TANAH") + 1 : 4;
+    const colFotoTanah = headersSekitar.indexOf("FOTO TANAH") > -1 ? headersSekitar.indexOf("FOTO TANAH") + 1 : 5;
+    const colJarak = headersSekitar.indexOf("JARAK LOKASI-JALAN RAYA") > -1 ? headersSekitar.indexOf("JARAK LOKASI-JALAN RAYA") + 1 : (headersSekitar.indexOf("JARAK") > -1 ? headersSekitar.indexOf("JARAK") + 1 : 6);
+
+    if (rIdx > -1) {
+      // Baris ditemukan: isi kolom data lainnya tanpa menyentuh kolom NO. WO
+      if (colArea > 0 && colArea !== noWoCol) sheetSekitar.getRange(rIdx, colArea).setValue(area.areaPekerjaan || "");
+      if (colFotoArea > 0 && colFotoArea !== noWoCol) sheetSekitar.getRange(rIdx, colFotoArea).setValue(urlFotoArea || "");
+      if (colTanah > 0 && colTanah !== noWoCol) sheetSekitar.getRange(rIdx, colTanah).setValue(area.kondisiTanah || "");
+      if (colFotoTanah > 0 && colFotoTanah !== noWoCol) sheetSekitar.getRange(rIdx, colFotoTanah).setValue(urlFotoTanah || "");
+      if (colJarak > 0 && colJarak !== noWoCol) sheetSekitar.getRange(rIdx, colJarak).setValue(area.jarakJalanRaya || "");
+    } else {
+      // Jika baris belum ada di sheet, baru tambahkan
+      sheetSekitar.appendRow([
+        noWo,
+        area.areaPekerjaan || "",
+        urlFotoArea,
+        area.kondisiTanah || "",
+        urlFotoTanah,
+        area.jarakJalanRaya || "",
+      ]);
+    }
   }
 
   // 4. Upload Images for Konstruksi
@@ -1675,29 +1710,65 @@ function handleSubmitReviewForm(payload) {
     urlFotoLanjut = res ? "https://lh3.googleusercontent.com/d/" + res.id : "";
   }
 
-  // 5. Save to KON_KONSTRUKSI ("NO. WO","SUTM","FOTO SUTM","KONSTRUKSI","FOTO KONSTRUKSI","TIANG","FOTO TIANG")
+  // 5. Save to KON_KONSTRUKSI: Cari NO. WO lalu isi kolom lainnya tanpa menimpa NO. WO
   const sheetKonstruksi = reviewWoSS.getSheetByName("KON_KONSTRUKSI");
   if (sheetKonstruksi && konstruksi) {
-    sheetKonstruksi.appendRow([
-      noWo,
-      konstruksi.konstruksi1 || "",
-      urlFotoSutm,
-      konstruksi.konstruksi3 || "",
-      urlFotoLanjut,
-      konstruksi.konstruksi2 || "",
-      urlFotoTiang,
-    ]);
+    const rIdx = findRowIndexByNoWo(sheetKonstruksi, noWo);
+    const dataKon = sheetKonstruksi.getDataRange().getValues();
+    const headersKon = (dataKon[0] || []).map(h => h ? h.toString().toUpperCase().trim() : "");
+    const noWoCol = headersKon.indexOf("NO. WO") > -1 ? headersKon.indexOf("NO. WO") + 1 : 1;
+    const colSutm = headersKon.indexOf("SUTM") > -1 ? headersKon.indexOf("SUTM") + 1 : 2;
+    const colFotoSutm = headersKon.indexOf("FOTO SUTM") > -1 ? headersKon.indexOf("FOTO SUTM") + 1 : 3;
+    const colKonstruksi = headersKon.indexOf("KONSTRUKSI") > -1 ? headersKon.indexOf("KONSTRUKSI") + 1 : 4;
+    const colFotoKonstruksi = headersKon.indexOf("FOTO KONSTRUKSI") > -1 ? headersKon.indexOf("FOTO KONSTRUKSI") + 1 : 5;
+    const colTiang = headersKon.indexOf("TIANG") > -1 ? headersKon.indexOf("TIANG") + 1 : 6;
+    const colFotoTiang = headersKon.indexOf("FOTO TIANG") > -1 ? headersKon.indexOf("FOTO TIANG") + 1 : 7;
+
+    if (rIdx > -1) {
+      // Baris ditemukan: isi kolom data lainnya tanpa menyentuh kolom NO. WO
+      if (colSutm > 0 && colSutm !== noWoCol) sheetKonstruksi.getRange(rIdx, colSutm).setValue(konstruksi.konstruksi1 || "");
+      if (colFotoSutm > 0 && colFotoSutm !== noWoCol) sheetKonstruksi.getRange(rIdx, colFotoSutm).setValue(urlFotoSutm || "");
+      if (colKonstruksi > 0 && colKonstruksi !== noWoCol) sheetKonstruksi.getRange(rIdx, colKonstruksi).setValue(konstruksi.konstruksi3 || "");
+      if (colFotoKonstruksi > 0 && colFotoKonstruksi !== noWoCol) sheetKonstruksi.getRange(rIdx, colFotoKonstruksi).setValue(urlFotoLanjut || "");
+      if (colTiang > 0 && colTiang !== noWoCol) sheetKonstruksi.getRange(rIdx, colTiang).setValue(konstruksi.konstruksi2 || "");
+      if (colFotoTiang > 0 && colFotoTiang !== noWoCol) sheetKonstruksi.getRange(rIdx, colFotoTiang).setValue(urlFotoTiang || "");
+    } else {
+      sheetKonstruksi.appendRow([
+        noWo,
+        konstruksi.konstruksi1 || "",
+        urlFotoSutm,
+        konstruksi.konstruksi3 || "",
+        urlFotoLanjut,
+        konstruksi.konstruksi2 || "",
+        urlFotoTiang,
+      ]);
+    }
   }
 
-  // 6. Save pekerjaan
+  // 6. Save to PEKERJAAN: Cari NO. WO lalu isi kolom lainnya tanpa menimpa NO. WO
   const sheetPekerjaan = reviewWoSS.getSheetByName("PEKERJAAN");
   if (sheetPekerjaan && pekerjaan) {
-    sheetPekerjaan.appendRow([
-      noWo,
-      pekerjaan.sop || "",
-      pekerjaan.instruksi || "",
-      pekerjaan.detail || "",
-    ]);
+    const rIdx = findRowIndexByNoWo(sheetPekerjaan, noWo);
+    const dataPek = sheetPekerjaan.getDataRange().getValues();
+    const headersPek = (dataPek[0] || []).map(h => h ? h.toString().toUpperCase().trim() : "");
+    const noWoCol = headersPek.indexOf("NO. WO") > -1 ? headersPek.indexOf("NO. WO") + 1 : 1;
+    const colSop = headersPek.indexOf("SOP PEKERJAAN") > -1 ? headersPek.indexOf("SOP PEKERJAAN") + 1 : (headersPek.indexOf("SOP") > -1 ? headersPek.indexOf("SOP") + 1 : 2);
+    const colIk = headersPek.indexOf("INSTRUKSI KERJA") > -1 ? headersPek.indexOf("INSTRUKSI KERJA") + 1 : (headersPek.indexOf("INSTRUKSI") > -1 ? headersPek.indexOf("INSTRUKSI") + 1 : 3);
+    const colDetail = headersPek.indexOf("DETAIL PEKERJAAN") > -1 ? headersPek.indexOf("DETAIL PEKERJAAN") + 1 : (headersPek.indexOf("DETAIL") > -1 ? headersPek.indexOf("DETAIL") + 1 : 4);
+
+    if (rIdx > -1) {
+      // Baris ditemukan: isi kolom data lainnya tanpa menyentuh kolom NO. WO
+      if (colSop > 0 && colSop !== noWoCol) sheetPekerjaan.getRange(rIdx, colSop).setValue(pekerjaan.sop || "");
+      if (colIk > 0 && colIk !== noWoCol) sheetPekerjaan.getRange(rIdx, colIk).setValue(pekerjaan.instruksi || "");
+      if (colDetail > 0 && colDetail !== noWoCol) sheetPekerjaan.getRange(rIdx, colDetail).setValue(pekerjaan.detail || "");
+    } else {
+      sheetPekerjaan.appendRow([
+        noWo,
+        pekerjaan.sop || "",
+        pekerjaan.instruksi || "",
+        pekerjaan.detail || "",
+      ]);
+    }
   }
 
   // 7. Save Material List
@@ -1787,23 +1858,16 @@ function handleSubmitReviewForm(payload) {
     const picUnitIdx = headers.indexOf("PIC UNIT") > -1 ? headers.indexOf("PIC UNIT") + 1 : 6;
     const tanggalColIdx = headers.indexOf("TANGGAL DIRENCANAKAN") > -1 ? headers.indexOf("TANGGAL DIRENCANAKAN") + 1 : 7;
 
-    let rowIndex = -1;
-    for (let i = 1; i < data.length; i++) {
-       if (String(data[i][noWoColIdx - 1]).trim() === String(noWo).trim()) {
-           rowIndex = i + 1; // 1-based index for Google Sheets
-           break;
-       }
-    }
-
+    const rowIndex = findRowIndexByNoWo(sheetApprovalReview, noWo);
     const tglRen = formatDateToID(approval.tanggalRencana) || "";
     
     if (rowIndex > -1) {
        // Update existing row independently to preserve formulas in other columns like NO. WO
-       if (prefStatusColIdx > 0) sheetApprovalReview.getRange(rowIndex, prefStatusColIdx).setValue(approval.status || "");
-       if (prefKetColIdx > 0) sheetApprovalReview.getRange(rowIndex, prefKetColIdx).setValue(approval.keterangan || "");
-       if (pelaksanaIdx > 0) sheetApprovalReview.getRange(rowIndex, pelaksanaIdx).setValue(approval.pelaksanaPdkb || "");
-       if (picUnitIdx > 0) sheetApprovalReview.getRange(rowIndex, picUnitIdx).setValue(approval.picUnit || "");
-       if (tanggalColIdx > 0) sheetApprovalReview.getRange(rowIndex, tanggalColIdx).setValue(tglRen);
+       if (prefStatusColIdx > 0 && prefStatusColIdx !== noWoColIdx) sheetApprovalReview.getRange(rowIndex, prefStatusColIdx).setValue(approval.status || "");
+       if (prefKetColIdx > 0 && prefKetColIdx !== noWoColIdx) sheetApprovalReview.getRange(rowIndex, prefKetColIdx).setValue(approval.keterangan || "");
+       if (pelaksanaIdx > 0 && pelaksanaIdx !== noWoColIdx) sheetApprovalReview.getRange(rowIndex, pelaksanaIdx).setValue(approval.pelaksanaPdkb || "");
+       if (picUnitIdx > 0 && picUnitIdx !== noWoColIdx) sheetApprovalReview.getRange(rowIndex, picUnitIdx).setValue(approval.picUnit || "");
+       if (tanggalColIdx > 0 && tanggalColIdx !== noWoColIdx) sheetApprovalReview.getRange(rowIndex, tanggalColIdx).setValue(tglRen);
     }
   }
 
@@ -5097,13 +5161,21 @@ function handleExportSp2bSp3bDocument(payload) {
  */
 function handleExportFromGoogleDocTemplate(payload) {
   try {
-    var templateDocId = payload.templateDocId;
+    var docType = payload.docType || "SP2B_SP3B";
+    var isWorkOrder = (docType === "WORK_ORDER" || (payload.fileName && String(payload.fileName).indexOf("WORK_ORDER") === 0));
+
+    // Default template master resmi sesuai jenis dokumen
+    var defaultTemplateId = isWorkOrder
+      ? (DRIVE_FOLDERS.WORK_ORDER_TEMPLATE || "17le09DrRAqCtmdBQWtWqsD-KO-2td3eTSVXn_mg5r_o")
+      : (DRIVE_FOLDERS.SP2B_TEMPLATE || "1kdpZFjeu356d-vF16ph9oZhuPKHZAueBdO3mDmr7lso");
+
+    var templateDocId = payload.templateDocId || defaultTemplateId;
     if (!templateDocId) {
       return { success: false, error: "templateDocId wajib disertakan." };
     }
 
     var folderId = payload.folderId || DRIVE_FOLDERS.PDKB_RECCA_EXPORT || "1urqblbRHzJroJ5i8VjCIpb0iDkBrQNF6";
-    var fileName = payload.fileName || ("DOKUMEN_EXPORT_" + Date.now() + ".pdf");
+    var fileName = payload.fileName || ((isWorkOrder ? "WORK_ORDER_" : "SP2B_SP3B_") + Date.now() + ".pdf");
     var replacements = payload.replacements || {};
     var imageReplacements = payload.imageReplacements || {};
 
@@ -5149,38 +5221,62 @@ function handleExportFromGoogleDocTemplate(payload) {
     }
 
     // Replace semua key-value text
+    // PENTING: Wajib me-replace variasi {{key}} dan [key] terlebih dahulu agar tanda kurung tidak tertinggal!
     for (var placeholder in replacements) {
       if (replacements.hasOwnProperty(placeholder)) {
         var value = replacements[placeholder];
-        
-        replaceInContainer(body, placeholder, value);
-        if (header) replaceInContainer(header, placeholder, value);
-        if (footer) replaceInContainer(footer, placeholder, value);
+        var cleanVal = (value !== null && value !== undefined) ? String(value) : "";
+        var cleanKey = placeholder.replace(/^[{\[\s]+|[}\]\s]+$/g, "");
 
-        // Otomatis cek variasi {{key}} dan [key]
-        var cleanKey = placeholder.replace(/^[{\[]+|[}\]]+$/g, "");
+        // 1. Prioritas paling utama: Replace {{cleanKey}} beserta kurung kurawal ganda secara utuh
         var doubleCurly = "{{" + cleanKey + "}}";
+        replaceInContainer(body, doubleCurly, cleanVal);
+        if (header) replaceInContainer(header, doubleCurly, cleanVal);
+        if (footer) replaceInContainer(footer, doubleCurly, cleanVal);
+
+        // 2. Replace [cleanKey] beserta kurung siku secara utuh
         var singleBracket = "[" + cleanKey + "]";
+        replaceInContainer(body, singleBracket, cleanVal);
+        if (header) replaceInContainer(header, singleBracket, cleanVal);
+        if (footer) replaceInContainer(footer, singleBracket, cleanVal);
 
-        if (doubleCurly !== placeholder) {
-          replaceInContainer(body, doubleCurly, value);
-          if (header) replaceInContainer(header, doubleCurly, value);
-          if (footer) replaceInContainer(footer, doubleCurly, value);
-        }
-
-        if (singleBracket !== placeholder) {
-          replaceInContainer(body, singleBracket, value);
-          if (header) replaceInContainer(header, singleBracket, value);
-          if (footer) replaceInContainer(footer, singleBracket, value);
+        // 3. Jika placeholder asli memuat kurung kurawal atau siku
+        if (placeholder.indexOf("{") !== -1 || placeholder.indexOf("[") !== -1) {
+          replaceInContainer(body, placeholder, cleanVal);
+          if (header) replaceInContainer(header, placeholder, cleanVal);
+          if (footer) replaceInContainer(footer, placeholder, cleanVal);
         }
       }
+    }
+
+    // Pembersihan akhir jika ada placeholder kosong yang menyisakan {{}}
+    replaceInContainer(body, "{{}}", "");
+    replaceInContainer(body, "[]", "");
+    if (header) {
+      replaceInContainer(header, "{{}}", "");
+      replaceInContainer(header, "[]", "");
+    }
+    if (footer) {
+      replaceInContainer(footer, "{{}}", "");
+      replaceInContainer(footer, "[]", "");
     }
 
     // 3. Sisipkan Gambar jika ada (misal foto_temuan, CAPTURE MAP)
     for (var imgPlaceholder in imageReplacements) {
       if (imageReplacements.hasOwnProperty(imgPlaceholder)) {
         var imgData = imageReplacements[imgPlaceholder];
-        if (!imgData) continue;
+        var cleanImgKey = imgPlaceholder.replace(/^[{\[]+|[}\]]+$/g, "");
+        var imgPatterns = [imgPlaceholder, "{{" + cleanImgKey + "}}", "[" + cleanImgKey + "]"];
+
+        if (!imgData) {
+          // Jika gambar tidak ada / kosong, hapus placeholder agar dokumen bersih
+          imgPatterns.forEach(function(pat) {
+            replaceInContainer(body, pat, "");
+            if (header) replaceInContainer(header, pat, "");
+            if (footer) replaceInContainer(footer, pat, "");
+          });
+          continue;
+        }
 
         try {
           var imageBlob = null;
@@ -5190,15 +5286,26 @@ function handleExportFromGoogleDocTemplate(payload) {
             var mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
             imageBlob = Utilities.newBlob(Utilities.base64Decode(base64Content), mime, "inline_image.jpg");
           } else if (typeof imgData === 'string' && (imgData.indexOf('http://') === 0 || imgData.indexOf('https://') === 0)) {
-            imageBlob = UrlFetchApp.fetch(imgData).getBlob();
+            // Jika Google Drive URL
+            var directUrl = imgData;
+            if (imgData.indexOf('drive.google.com') !== -1 || imgData.indexOf('docs.google.com') !== -1) {
+              var dMatch = imgData.match(/id=([a-zA-Z0-9_-]+)/) || imgData.match(/\/d\/([a-zA-Z0-9_-]+)/);
+              if (dMatch && dMatch[1]) {
+                try {
+                  imageBlob = DriveApp.getFileById(dMatch[1]).getBlob();
+                } catch (dErr) {
+                  directUrl = "https://drive.google.com/uc?export=download&id=" + dMatch[1];
+                }
+              }
+            }
+            if (!imageBlob) {
+              imageBlob = UrlFetchApp.fetch(directUrl).getBlob();
+            }
           }
 
           if (imageBlob) {
-            var cleanImgKey = imgPlaceholder.replace(/^[{\[]+|[}\]]+$/g, "");
-            var patterns = [imgPlaceholder, "{{" + cleanImgKey + "}}", "[" + cleanImgKey + "]"];
-
-            for (var pIdx = 0; pIdx < patterns.length; pIdx++) {
-              var pat = patterns[pIdx];
+            for (var pIdx = 0; pIdx < imgPatterns.length; pIdx++) {
+              var pat = imgPatterns[pIdx];
               var foundElement = body.findText(pat.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1"));
               if (foundElement) {
                 var el = foundElement.getElement();
@@ -5231,7 +5338,7 @@ function handleExportFromGoogleDocTemplate(payload) {
     // Simpan dokumen
     doc.saveAndClose();
 
-    // 4. Konversi salinan Google Doc menjadi PDF
+    // 4. Konversi salinan Google Doc menjadi PDF langsung oleh Google Docs engine
     var pdfBlob = copiedFile.getAs("application/pdf").setName(fileName);
     var pdfFile = targetFolder.createFile(pdfBlob);
     try {
@@ -5251,7 +5358,7 @@ function handleExportFromGoogleDocTemplate(payload) {
 
     return {
       success: true,
-      message: "Dokumen PDF berhasil digenerate dari Google Docs Template dan disimpan ke Google Drive.",
+      message: "Dokumen PDF berhasil digenerate dari Google Docs Template resmi dan disimpan ke Google Drive.",
       fileId: pdfId,
       fileName: fileName,
       fileUrl: pdfUrl,
@@ -5274,18 +5381,13 @@ function handleExportFromGoogleDocTemplate(payload) {
  * Jalankan fungsi ini sekali di Google Apps Script Editor untuk mengotorisasi izin Google Docs & Google Drive:
  * 1. Buka Apps Script Editor
  * 2. Pilih fungsi 'authorizeGoogleDocsAndDrive' pada dropdown fungsi di toolbar atas
- * 3. Klik 'Jalankan' (Run) dan setujui izin pop-up Google OAuth
+ * 3. Klik 'Jalankan' (Run)
+ * PENTING: Jangan gunakan try-catch agar Google Apps Script memicu dialog otorisasi (Review Permissions)
  */
 function authorizeGoogleDocsAndDrive() {
-  try {
-    var dummyDoc = DocumentApp.create("TEMP_AUTH_TEST");
-    dummyDoc.getBody().appendParagraph("Auth OK");
-    dummyDoc.saveAndClose();
-    DriveApp.getFileById(dummyDoc.getId()).setTrashed(true);
-    Logger.log("Izin Google Docs & Drive BERHASIL diotorisasi!");
-  } catch (err) {
-    Logger.log("Error otorisasi: " + err.toString());
-  }
+  // Panggil DocumentApp secara langsung tanpa try-catch agar Google menampilkan pop-up OAuth
+  var doc = DocumentApp.openById("1kdpZFjeu356d-vF16ph9oZhuPKHZAueBdO3mDmr7lso");
+  Logger.log("BERHASIL! Google Docs template terotorisasi: " + doc.getName());
 }
 
 

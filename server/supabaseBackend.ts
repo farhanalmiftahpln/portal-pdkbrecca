@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import fs from 'fs';
 import path from 'path';
-import { generateFilledWorkOrderGoogleDocPdf, generateFilledSp2bSp3bGoogleDocPdf, GOOGLE_DOC_TEMPLATES } from '../src/utils/googleDocPdfFiller';
+import { generateExactWorkOrderPdf, generateExactSp2bSp3bPdf } from '../src/utils/exactPdfTemplateGenerator';
+import { GOOGLE_DOC_TEMPLATES } from '../src/utils/googleDocPdfFiller';
 
 let gasDocumentAppSupported: boolean | null = null;
 
@@ -5140,7 +5141,7 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
                   fileName
                 }
               }),
-              signal: AbortSignal.timeout(3500)
+              signal: AbortSignal.timeout(45000)
             });
 
             const resJson: any = await res.json();
@@ -5149,6 +5150,7 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
               gasResJson = resJson;
               gasDocumentAppSupported = true;
             } else {
+              gasResJson = resJson;
               const errMsg = resJson?.error || resJson?.message || '';
               if (errMsg.includes('Specified permissions are not sufficient') || errMsg.includes('DocumentApp') || resJson?.permissionRequired) {
                 gasDocumentAppSupported = false;
@@ -5173,7 +5175,7 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
                     fileName
                   }
                 }),
-                signal: AbortSignal.timeout(3500)
+                signal: AbortSignal.timeout(45000)
               });
               const resLlcJson: any = await resLlc.json();
               if (resLlcJson && resLlcJson.success) {
@@ -5181,6 +5183,7 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
                 gasResJson = resLlcJson;
                 gasDocumentAppSupported = true;
               } else {
+                gasResJson = resLlcJson;
                 const errMsg = resLlcJson?.error || resLlcJson?.message || '';
                 if (errMsg.includes('Specified permissions are not sufficient') || errMsg.includes('DocumentApp') || resLlcJson?.permissionRequired) {
                   gasDocumentAppSupported = false;
@@ -5209,6 +5212,11 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
           return gasResJson;
         }
 
+        // Jika Google Apps Script mengembalikan error (misal perizinan ditolak), kembalikan error tersebut secara transparan
+        if (gasResJson && (!gasResJson.success || gasResJson.permissionRequired)) {
+          return gasResJson;
+        }
+
         // 2. SEAMLESS BUILT-IN TEMPLATE ENGINE FALLBACK:
         // Jika GAS belum memiliki izin DocumentApp (atau belum di-deploy ulang),
         // jalankan engine built-in googleDocPdfFiller untuk mengisi template Google Docs secara presisi
@@ -5219,40 +5227,38 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
           const rawRep = payload?.rawReplacements || payload?.replacements || {};
 
           if (docType === 'WORK_ORDER' || fileName.includes('WORK_ORDER') || fileName.includes('WO') || templateDocId === GOOGLE_DOC_TEMPLATES.WORK_ORDER) {
-            pdfBytes = await generateFilledWorkOrderGoogleDocPdf({
+            const doc = await generateExactWorkOrderPdf({
+              noWo: rawRep['inputNoWo'] || rawRep['INPUT NO. WO'] || '001',
               inputNoWo: rawRep['inputNoWo'] || rawRep['INPUT NO. WO'] || '001',
-              bulan: rawRep['bulan'] || rawRep['BULAN'] || 'IX',
-              tahun: rawRep['tahun'] || rawRep['TAHUN'] || new Date().getFullYear().toString(),
-              tanggalSurvey: rawRep['tanggalSurvey'] || rawRep['TANGGAL_SURVEY'] || rawRep['TANGGAL SURVEY'] || '-',
-              ulp: rawRep['ulp'] || 'WATAMPONE',
-              instruksiKerja: rawRep['instruksiKerja'] || rawRep['instruksi_kerja'] || '-',
-              alamat: rawRep['alamat'] || '-',
               inputNoTiang: rawRep['inputNoTiang'] || rawRep['INPUT NO. TIANG'] || '-',
+              instruksiKerja: rawRep['instruksiKerja'] || rawRep['instruksi_kerja'] || '-',
+              ulp: rawRep['ulp'] || 'WATAMPONE',
+              alamat: rawRep['alamat'] || '-',
               garduInduk: rawRep['garduInduk'] || rawRep['gardu_induk'] || '-',
               penyulang: rawRep['penyulang'] || '-',
               jenisTiang: rawRep['jenisTiang'] || rawRep['jenis_tiang'] || 'BETON',
               ukuranTiang: rawRep['ukuranTiang'] || rawRep['ukuran_tiang'] || '12',
               jenisKonduktor: rawRep['jenisKonduktor'] || rawRep['jenis_konduktor'] || 'AAAC-S',
               ukuranKonduktor: rawRep['ukuranKonduktor'] || rawRep['ukuran_konduktor'] || '150',
-              preparator: rawRep['preparator'] || rawRep['user_name.user_role=PREPARATOR'] || 'AKMAL FADIL',
-              asman: rawRep['asman'] || rawRep['user_name.user_role=ASMAN'] || 'BAKHTIAR',
-              fotoUrl: payload?.imageReplacements?.['foto_temuan'] || rawRep['fotoUrl'] || '',
-              mapUrl: payload?.imageReplacements?.['CAPTURE MAP'] || rawRep['mapUrl'] || '',
-              koordinat: rawRep['koordinat'] || ''
-            }, templateDocId);
+              tanggalSurvey: rawRep['tanggalSurvey'] || rawRep['TANGGAL_SURVEY'] || rawRep['TANGGAL SURVEY'] || '-',
+              preparatorName: rawRep['preparator'] || rawRep['user_name.user_role=PREPARATOR'] || 'AKMAL FADIL',
+              asmanName: rawRep['asman'] || rawRep['user_name.user_role=ASMAN'] || 'BAKHTIAR',
+              koordinat: rawRep['koordinat'] || '',
+              fotoTemuan: payload?.imageReplacements?.['foto_temuan'] || rawRep['fotoUrl'] || '',
+              mapUrl: payload?.imageReplacements?.['CAPTURE MAP'] || rawRep['mapUrl'] || ''
+            });
+            pdfBytes = new Uint8Array(doc.output('arraybuffer'));
           } else {
-            pdfBytes = await generateFilledSp2bSp3bGoogleDocPdf({
+            const doc = await generateExactSp2bSp3bPdf({
               inputNoSp2b: rawRep['inputNoSp2b'] || rawRep['INPUT NO. SP2B'] || '001',
               inputNoWo: rawRep['inputNoWo'] || rawRep['INPUT NO. WO'] || '001',
-              bulan: rawRep['bulan'] || rawRep['BULAN'] || 'IX',
-              tahun: rawRep['tahun'] || rawRep['TAHUN'] || new Date().getFullYear().toString(),
+              inputNoTiang: rawRep['inputNoTiang'] || rawRep['INPUT NO. TIANG'] || '-',
+              instruksiKerja: rawRep['instruksiKerja'] || rawRep['instruksi_kerja'] || '-',
+              jenisPekerjaan: rawRep['jenisPekerjaan'] || rawRep['jenis_pekerjaan'] || rawRep['instruksiKerja'] || '-',
               tanggalDirencanakan: rawRep['tanggalDirencanakan'] || rawRep['tanggal_direncanakan'] || '-',
               tanggalHMinus1: rawRep['tanggalHMinus1'] || rawRep['h-1.tanggal_direncanakan'] || '-',
-              instruksiKerja: rawRep['instruksiKerja'] || rawRep['instruksi_kerja'] || '-',
-              jenisPekerjaan: rawRep['jenisPekerjaan'] || rawRep['jenis_pekerjaan'] || '-',
               ulp: rawRep['ulp'] || 'WATAMPONE',
               alamat: rawRep['alamat'] || '-',
-              inputNoTiang: rawRep['inputNoTiang'] || rawRep['INPUT NO. TIANG'] || '-',
               garduInduk: rawRep['garduInduk'] || rawRep['gardu_induk'] || '-',
               penyulang: rawRep['penyulang'] || '-',
               jenisTiang: rawRep['jenisTiang'] || rawRep['jenis_tiang'] || 'BETON',
@@ -5262,14 +5268,14 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
               kondisiTanah: rawRep['kondisiTanah'] || rawRep['area.KONDISI TANAH'] || 'Kering',
               jarakJalanRaya: rawRep['jarakJalanRaya'] || rawRep['area. JARAK LOKASI-JALAN RAYA'] || '5 Meter',
               personilReady: Number(rawRep['personilReady'] || rawRep['PERSONIL READY'] || 8),
-              durasiPekerjaan: rawRep['durasiPekerjaan'] || rawRep['DURASI PEKERJAAN'] || '3 Jam',
+              durasiPekerjaan: rawRep['durasiPekerjaan'] || rawRep['DURASI PEKERJAAN'] || '3',
               tingkatKesulitan: rawRep['tingkatKesulitan'] || rawRep['TINGKAT KESULITAN'] || 'SEDANG',
               opsiBangunan: rawRep['opsiBangunan'] || rawRep['OPSI BANGUNAN'] || 'Tidak Ada',
-              opsiPohon: rawRep['opsiPohon'] || rawRep['OPSI POHON'] || 'Ada',
+              opsiPohon: rawRep['opsiPohon'] || rawRep['OPSI POHON'] || 'Ada (Perlu Blanket / Isolasi)',
               opsiSiap: rawRep['opsiSiap'] || rawRep['OPSI SIAP'] || 'MAMPU',
-              opsiJalan: rawRep['opsiJalan'] || rawRep['OPSI JALAN'] || 'Aman',
-              preparator: rawRep['preparator'] || rawRep['user_name.user_role=PREPARATOR'] || 'AKMAL FADIL',
-              asman: rawRep['asman'] || rawRep['user_name.user_role=ASMAN'] || 'BAKHTIAR',
+              opsiJalan: rawRep['opsiJalan'] || rawRep['OPSI JALAN'] || 'Perlu Rambu K3 & Traffic Cone',
+              preparatorName: rawRep['preparator'] || rawRep['user_name.user_role=PREPARATOR'] || 'AKMAL FADIL',
+              asmanName: rawRep['asman'] || rawRep['user_name.user_role=ASMAN'] || 'BAKHTIAR',
               asmanBidang: rawRep['asmanBidang'] || rawRep['user_bidang.user_role=ASMAN'] || 'ASMAN JARINGAN DAN KONSTRUKSI',
               namaPP: rawRep['namaPP'] || rawRep['nama_pp'] || 'PENGAWAS PEKERJAAN',
               noLv3PP: rawRep['noLv3PP'] || rawRep['no_lv3_pp'] || '-',
@@ -5277,8 +5283,10 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
               noLv3PK3: rawRep['noLv3PK3'] || rawRep['no_lv3_pk3'] || '-',
               personnelList: payload?.personnelList || [],
               fotoUrl: payload?.imageReplacements?.['foto_temuan'] || rawRep['fotoUrl'] || '',
-              koordinat: rawRep['koordinat'] || ''
-            }, templateDocId);
+              koordinat: rawRep['koordinat'] || '',
+              docType: docType || 'BUNDLE'
+            });
+            pdfBytes = new Uint8Array(doc.output('arraybuffer'));
           }
 
           const pdfBase64 = Buffer.from(pdfBytes).toString('base64');

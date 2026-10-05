@@ -101,25 +101,80 @@ export function formatThreeDigitWo(rawWo: any): string {
   return digits;
 }
 
-// Safely convert image URL (Drive, HTTP) to Base64
-export function loadImageAsBase64(rawUrl: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    if (!rawUrl || typeof rawUrl !== 'string') return resolve(null);
-    const trimmed = rawUrl.trim();
-    if (!trimmed) return resolve(null);
+// Safely convert image URL (Drive, HTTP) to Base64 in both Browser and Node.js
+export async function loadImageAsBase64(rawUrl: string): Promise<string | null> {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+  const trimmed = rawUrl.trim();
+  if (
+    !trimmed ||
+    trimmed === '-' ||
+    trimmed.toUpperCase().startsWith('#') || // handles #N/A, #VALUE!, #REF!, etc.
+    trimmed.toLowerCase() === 'null' ||
+    trimmed.toLowerCase() === 'undefined'
+  ) {
+    return null;
+  }
 
-    if (trimmed.startsWith('data:image/')) {
-      return resolve(trimmed);
+  if (trimmed.startsWith('data:image/')) {
+    return trimmed;
+  }
+
+  // Must be an HTTP or HTTPS URL
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+    return null;
+  }
+
+  let safeUrl = trimmed;
+  let driveFileId: string | null = null;
+  if (trimmed.includes('drive.google.com') || trimmed.includes('docs.google.com')) {
+    const match = trimmed.match(/id=([a-zA-Z0-9_-]+)/) || trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      driveFileId = match[1];
+      safeUrl = `https://drive.google.com/thumbnail?id=${match[1]}&sz=w1000`;
     }
+  }
 
-    let safeUrl = trimmed;
-    if (trimmed.includes('drive.google.com') || trimmed.includes('docs.google.com')) {
-      const match = trimmed.match(/id=([a-zA-Z0-9_-]+)/) || trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
-      if (match && match[1]) {
-        safeUrl = `https://drive.google.com/thumbnail?id=${match[1]}&sz=w1000`;
+  // Validate URL format
+  try {
+    new URL(safeUrl);
+  } catch {
+    return null;
+  }
+
+  // Node.js environment or headless server (where Image or document is undefined)
+  if (typeof Image === 'undefined' || typeof document === 'undefined') {
+    try {
+      let res = await fetch(safeUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      if (!res.ok && driveFileId) {
+        res = await fetch(`https://lh3.googleusercontent.com/d/${driveFileId}=s800`, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+        if (!res.ok) {
+          res = await fetch(`https://drive.google.com/uc?export=download&id=${driveFileId}`, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+        }
       }
+      if (res.ok) {
+        const arrayBuf = await res.arrayBuffer();
+        const ct = res.headers.get('content-type') || 'image/jpeg';
+        let b64 = '';
+        if (typeof Buffer !== 'undefined') {
+          b64 = Buffer.from(arrayBuf).toString('base64');
+        } else {
+          const bytes = new Uint8Array(arrayBuf);
+          let binary = '';
+          for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          b64 = btoa(binary);
+        }
+        return `data:${ct};base64,${b64}`;
+      }
+    } catch (err) {
+      console.warn('Node image fetch error:', err);
     }
+    return null;
+  }
 
+  // Browser environment
+  return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'Anonymous';
     img.onload = () => {

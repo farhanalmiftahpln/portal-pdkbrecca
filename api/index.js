@@ -585,10 +585,155 @@ import { createClient as createClient3 } from "@supabase/supabase-js";
 import fs3 from "fs";
 import path3 from "path";
 
-// src/utils/googleDocPdfFiller.ts
-import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+// src/utils/exactPdfTemplateGenerator.ts
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 // src/utils/exportTemplateUtils.ts
+function getRomanMonth(monthIndex) {
+  const romanMap = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+  const month = typeof monthIndex === "number" ? monthIndex : (/* @__PURE__ */ new Date()).getMonth() + 1;
+  const idx = Math.max(1, Math.min(12, month)) - 1;
+  return romanMap[idx] || "IX";
+}
+function formatDateDDMMYYYY(val) {
+  if (!val) {
+    const d = /* @__PURE__ */ new Date();
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    return `${dd}-${mm}-${yyyy}`;
+  }
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return "-";
+    const dd = String(val.getDate()).padStart(2, "0");
+    const mm = String(val.getMonth() + 1).padStart(2, "0");
+    const yyyy = val.getFullYear();
+    return `${dd}-${mm}-${yyyy}`;
+  }
+  const s = String(val).trim();
+  if (!s || s === "-" || s === "null" || s === "undefined") return "-";
+  if (/^\d{2}-\d{2}-\d{4}$/.test(s)) return s;
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
+    const [d, m, y] = s.split("/");
+    return `${d.padStart(2, "0")}-${m.padStart(2, "0")}-${y}`;
+  }
+  if (/^\d{4}-\d{1,2}-\d{1,2}/.test(s)) {
+    const parts = s.split("T")[0].split("-");
+    if (parts.length === 3) {
+      return `${parts[2].padStart(2, "0")}-${parts[1].padStart(2, "0")}-${parts[0]}`;
+    }
+  }
+  const parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) {
+    const dd = String(parsed.getDate()).padStart(2, "0");
+    const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+    const yyyy = parsed.getFullYear();
+    return `${dd}-${mm}-${yyyy}`;
+  }
+  return s;
+}
+function calculateHMinus1(val) {
+  let dateObj = null;
+  if (val instanceof Date) {
+    dateObj = new Date(val);
+  } else if (val) {
+    const s = String(val).trim();
+    if (/^\d{1,2}[-\/]\d{1,2}[-\/]\d{4}$/.test(s)) {
+      const parts = s.split(/[-\/]/);
+      dateObj = new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+    } else {
+      const parsed = new Date(s);
+      if (!isNaN(parsed.getTime())) {
+        dateObj = parsed;
+      }
+    }
+  }
+  if (!dateObj || isNaN(dateObj.getTime())) {
+    dateObj = /* @__PURE__ */ new Date();
+  }
+  const prevDate = new Date(dateObj.getTime());
+  prevDate.setDate(prevDate.getDate() - 1);
+  return formatDateDDMMYYYY(prevDate);
+}
+function loadImageAsBase64(rawUrl) {
+  return new Promise((resolve) => {
+    if (!rawUrl || typeof rawUrl !== "string") return resolve(null);
+    const trimmed = rawUrl.trim();
+    if (!trimmed) return resolve(null);
+    if (trimmed.startsWith("data:image/")) {
+      return resolve(trimmed);
+    }
+    let safeUrl = trimmed;
+    if (trimmed.includes("drive.google.com") || trimmed.includes("docs.google.com")) {
+      const match = trimmed.match(/id=([a-zA-Z0-9_-]+)/) || trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      if (match && match[1]) {
+        safeUrl = `https://drive.google.com/thumbnail?id=${match[1]}&sz=w1000`;
+      }
+    }
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        const maxDim = 800;
+        let w = img.naturalWidth || 400;
+        let h = img.naturalHeight || 300;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round(h * maxDim / w);
+            w = maxDim;
+          } else {
+            w = Math.round(w * maxDim / h);
+            h = maxDim;
+          }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, w, h);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+          resolve(dataUrl);
+        } else {
+          resolve(null);
+        }
+      } catch (err) {
+        console.warn("Canvas export error:", err);
+        resolve(null);
+      }
+    };
+    img.onerror = () => {
+      if (trimmed.includes("drive.google.com") || trimmed.includes("docs.google.com")) {
+        const match = trimmed.match(/id=([a-zA-Z0-9_-]+)/) || trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (match && match[1] && safeUrl.includes("thumbnail")) {
+          const img2 = new Image();
+          img2.crossOrigin = "Anonymous";
+          img2.onload = () => {
+            try {
+              const canvas = document.createElement("canvas");
+              canvas.width = img2.naturalWidth || 400;
+              canvas.height = img2.naturalHeight || 300;
+              const ctx = canvas.getContext("2d");
+              if (ctx) {
+                ctx.drawImage(img2, 0, 0);
+                resolve(canvas.toDataURL("image/jpeg", 0.85));
+                return;
+              }
+            } catch (e) {
+            }
+            resolve(null);
+          };
+          img2.onerror = () => resolve(null);
+          img2.src = `https://lh3.googleusercontent.com/d/${match[1]}=s800`;
+          return;
+        }
+      }
+      resolve(null);
+    };
+    img.src = safeUrl;
+  });
+}
 function parseCoordinates(coordStr) {
   if (!coordStr) return null;
   const s = String(coordStr).trim();
@@ -623,413 +768,858 @@ function getStaticMapImageUrl(coords) {
   return `https://static-maps.yandex.ru/1.x/?ll=${lng},${lat}&z=16&l=map&size=600,450&pt=${lng},${lat},pm2rdm`;
 }
 
+// src/utils/exactPdfTemplateGenerator.ts
+function drawPlnLogo(doc, x, y, width = 16, height = 18) {
+  doc.setFillColor(255, 222, 0);
+  doc.setDrawColor(220, 30, 30);
+  doc.setLineWidth(0.4);
+  doc.roundedRect(x, y, width, height, 1, 1, "FD");
+  doc.setDrawColor(0, 154, 218);
+  doc.setLineWidth(0.6);
+  const waveY1 = y + height * 0.35;
+  const waveY2 = y + height * 0.5;
+  const waveY3 = y + height * 0.65;
+  const wLeft = x + 2.5;
+  const wRight = x + width - 2.5;
+  doc.line(wLeft, waveY1, wRight, waveY1);
+  doc.line(wLeft, waveY2, wRight, waveY2);
+  doc.line(wLeft, waveY3, wRight, waveY3);
+  doc.setFillColor(227, 30, 36);
+  doc.setDrawColor(227, 30, 36);
+  const cx = x + width / 2;
+  const cy = y + height / 2;
+  doc.triangle(
+    cx + 2.5,
+    y + 2,
+    cx - 3.5,
+    cy + 1,
+    cx + 1,
+    cy + 1,
+    "FD"
+  );
+  doc.triangle(
+    cx + 1,
+    cy - 1,
+    cx - 3,
+    y + height - 2,
+    cx + 3,
+    cy - 1,
+    "FD"
+  );
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(0, 102, 179);
+  doc.text("PLN", x + width / 2, y + height + 3.5, { align: "center" });
+}
+function drawPdkbLogo(doc, x, y, size = 16) {
+  const cx = x + size / 2;
+  const cy = y + size / 2;
+  const r = size / 2 - 0.5;
+  doc.setFillColor(0, 80, 160);
+  doc.circle(cx, cy, r, "F");
+  doc.setDrawColor(255, 255, 255);
+  doc.setLineWidth(0.4);
+  doc.circle(cx, cy, r - 1.2, "S");
+  doc.setFillColor(220, 30, 30);
+  doc.triangle(
+    cx - 4,
+    cy + 3,
+    cx + 4,
+    cy - 3,
+    cx + 1,
+    cy + 4,
+    "F"
+  );
+  doc.setFillColor(255, 230, 0);
+  doc.circle(cx, cy, 1.2, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.setTextColor(200, 20, 20);
+  doc.text("PDKB", cx, y + size + 3.5, { align: "center" });
+}
+async function generateExactWorkOrderPdf(data) {
+  const doc = new jsPDF({
+    orientation: "p",
+    unit: "mm",
+    format: "a4",
+    compress: true
+  });
+  const pageWidth = 210;
+  const pageHeight = 297;
+  const margin = 10;
+  const contentWidth = pageWidth - margin * 2;
+  const contentBottom = pageHeight - margin;
+  const bulanRomawi = getRomanMonth();
+  const tahunSaatIni = (/* @__PURE__ */ new Date()).getFullYear().toString();
+  const inputNoWo = (data.inputNoWo || data.noWo || "001").padStart(3, "0");
+  const inputNoTiang = data.inputNoTiang || "-";
+  const tanggalSurveyFormatted = formatDateDDMMYYYY(data.tanggalSurvey || /* @__PURE__ */ new Date());
+  const rawUlp = data.ulp || "WATAMPONE";
+  const ulpFormatted = rawUlp.toUpperCase().startsWith("ULP") ? rawUlp : `ULP ${rawUlp}`;
+  const instruksiKerja = (data.instruksiKerja || "PEMELIHARAAN JARINGAN DISTRIBUSI 20kV").toUpperCase();
+  const alamat = data.alamat || "-";
+  const garduInduk = data.garduInduk || "-";
+  const penyulang = data.penyulang || "-";
+  const jenisTiang = data.jenisTiang || "BETON";
+  const ukuranTiang = data.ukuranTiang || "12";
+  const jenisKonduktor = data.jenisKonduktor || "AAAC-S";
+  const ukuranKonduktor = data.ukuranKonduktor || "150";
+  const preparatorName = data.preparatorName || "AKMAL FADIL";
+  const asmanName = data.asmanName || "BAKHTIAR";
+  doc.setDrawColor(30, 30, 30);
+  doc.setLineWidth(0.6);
+  doc.rect(margin, margin, contentWidth, contentBottom - margin);
+  const headerHeight = 25;
+  const col1W = 55;
+  const col2W = 75;
+  const col3W = contentWidth - col1W - col2W;
+  doc.setLineWidth(0.4);
+  doc.rect(margin, margin, contentWidth, headerHeight);
+  doc.line(margin + col1W, margin, margin + col1W, margin + headerHeight);
+  doc.line(margin + col1W + col2W, margin, margin + col1W + col2W, margin + headerHeight);
+  drawPlnLogo(doc, margin + 3, margin + 2.5, 11, 14);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(20, 20, 20);
+  doc.text("UIW SULSELRABAR", margin + 17, margin + 8);
+  doc.setFontSize(7.5);
+  doc.text("UP3 WATAMPONE", margin + 17, margin + 13);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.setTextColor(10, 10, 10);
+  doc.text("PENGAJUAN WORK ORDER PDKB", margin + col1W + col2W / 2, margin + 14, { align: "center" });
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7);
+  doc.setTextColor(30, 30, 30);
+  doc.text(`NO : [INPUT NO. WO]//WO/UP3`, margin + col1W + col2W + 3, margin + 6);
+  doc.text(`WATAMPONE.PREP/${bulanRomawi}/${tahunSaatIni} (`, margin + col1W + col2W + 3, margin + 10.5);
+  doc.text(`[TANGGAL_SURVEY] )`, margin + col1W + col2W + 3, margin + 15);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(6.5);
+  doc.setTextColor(60, 60, 60);
+  doc.text(`( ${tanggalSurveyFormatted} )`, margin + col1W + col2W + 3, margin + 20);
+  const barY = margin + headerHeight;
+  const barH = 7;
+  doc.setFillColor(255, 255, 255);
+  doc.rect(margin, barY, contentWidth, barH, "FD");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8.5);
+  doc.setTextColor(20, 20, 20);
+  doc.text("FORM WORK ORDER PDKB", margin + 3, barY + 5);
+  const tableStartY = barY + barH;
+  const colAWidth = 65;
+  const colBWidth = contentWidth - colAWidth;
+  autoTable(doc, {
+    startY: tableStartY,
+    theme: "grid",
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
+    headStyles: {
+      fillColor: [255, 255, 255],
+      textColor: [20, 20, 20],
+      fontStyle: "bold",
+      fontSize: 8,
+      halign: "center",
+      lineColor: [30, 30, 30],
+      lineWidth: 0.35
+    },
+    styles: {
+      fontSize: 7.5,
+      textColor: [20, 20, 20],
+      cellPadding: 2,
+      lineColor: [30, 30, 30],
+      lineWidth: 0.35
+    },
+    columnStyles: {
+      0: { cellWidth: colAWidth, fontStyle: "bold" },
+      1: { cellWidth: colBWidth }
+    },
+    head: [["DATA LOKASI", "HASIL PENELITIAN"]],
+    body: [
+      ["1.No Work Order", `${inputNoWo}/WO/UP3 WATAMPONE.PREP/${bulanRomawi}/${tahunSaatIni}`],
+      ["2.Unit", ulpFormatted],
+      ["3.Jenis Pekerjaan", instruksiKerja],
+      ["4.Lokasi Pekerjaan", alamat],
+      ["5.Nomor Tiang", inputNoTiang],
+      ["6.Gardu Induk | Penyulang", `GI 20KV ${garduInduk} | ${penyulang}`],
+      ["7.Jenis Tiang | Tinggi Tiang", `${jenisTiang} | ${ukuranTiang} Meter`],
+      ["8.Jenis Penghantar | Diameter Penghantar", `${jenisKonduktor} | ${ukuranKonduktor} sqmm`],
+      ["9.Pegawai Yang Mengajukan", preparatorName]
+    ]
+  });
+  const approvalY = doc.lastAutoTable.finalY + 4;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(20, 20, 20);
+  const signRightX = margin + contentWidth - 45;
+  doc.text("MENYETUJUI,", signRightX, approvalY, { align: "center" });
+  doc.text("ASMAN JAR DAN KONS", signRightX, approvalY + 4.5, { align: "center" });
+  doc.text(`( ${asmanName} )`, signRightX, approvalY + 24, { align: "center" });
+  const boxTopY = approvalY + 28;
+  const boxHeight = contentBottom - boxTopY - 3;
+  const boxW = (contentWidth - 6) / 2;
+  const box1X = margin + 2;
+  doc.setLineWidth(0.4);
+  doc.setDrawColor(40, 40, 40);
+  doc.rect(box1X, boxTopY, boxW, boxHeight);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.text("GAMBAR LOKASI", box1X + boxW / 2, boxTopY - 2, { align: "center" });
+  const box2X = margin + 4 + boxW;
+  doc.rect(box2X, boxTopY, boxW, boxHeight);
+  doc.text("PETA LOKASI", box2X + boxW / 2, boxTopY - 2, { align: "center" });
+  if (data.fotoUrl) {
+    try {
+      const base64Img = await loadImageAsBase64(data.fotoUrl);
+      if (base64Img) {
+        doc.addImage(base64Img, "JPEG", box1X + 2, boxTopY + 2, boxW - 4, boxHeight - 4);
+      } else {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7);
+        doc.setTextColor(100, 100, 100);
+        doc.text("[foto_temuan]", box1X + boxW / 2, boxTopY + boxHeight / 2, { align: "center" });
+      }
+    } catch (e) {
+      doc.text("[foto_temuan]", box1X + boxW / 2, boxTopY + boxHeight / 2, { align: "center" });
+    }
+  } else {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(120, 120, 120);
+    doc.text("[foto_temuan]", box1X + boxW / 2, boxTopY + boxHeight / 2, { align: "center" });
+  }
+  const mapUrl = data.mapUrl || (data.koordinat ? getStaticMapImageUrl(data.koordinat) : "");
+  let mapDrawn = false;
+  if (mapUrl) {
+    try {
+      const mapBase64 = await loadImageAsBase64(mapUrl);
+      if (mapBase64) {
+        doc.addImage(mapBase64, "PNG", box2X + 2, boxTopY + 2, boxW - 4, boxHeight - 12);
+        mapDrawn = true;
+      }
+    } catch (e) {
+      console.warn("Gagal menempelkan map screenshot:", e);
+    }
+  }
+  if (!mapDrawn) {
+    doc.setFillColor(250, 252, 255);
+    doc.rect(box2X + 2, boxTopY + 2, boxW - 4, boxHeight - 12, "F");
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(100, 100, 100);
+    doc.text("[CAPTURE MAP]", box2X + boxW / 2, boxTopY + boxHeight / 2 - 2, { align: "center" });
+  }
+  doc.setFillColor(240, 245, 252);
+  doc.rect(box2X + 2, boxTopY + boxHeight - 10, boxW - 4, 8, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(6.5);
+  doc.setTextColor(20, 60, 110);
+  doc.text(`TITIK KOORDINAT: ${data.koordinat || "-"}`, box2X + boxW / 2, boxTopY + boxHeight - 4.5, { align: "center" });
+  return doc;
+}
+async function generateExactSp2bSp3bPdf(data) {
+  const doc = new jsPDF({
+    orientation: "p",
+    unit: "mm",
+    format: "a4",
+    compress: true
+  });
+  const pageWidth = 210;
+  const pageHeight = 297;
+  const margin = 10;
+  const contentWidth = pageWidth - margin * 2;
+  const contentBottom = pageHeight - margin;
+  const bulanRomawi = getRomanMonth();
+  const tahunSaatIni = (/* @__PURE__ */ new Date()).getFullYear().toString();
+  const inputNoSp2b = (data.inputNoSp2b || "001").padStart(3, "0");
+  const inputNoWo = (data.inputNoWo || "001").padStart(3, "0");
+  const inputNoTiang = data.inputNoTiang || "-";
+  const tanggalDirencanakan = formatDateDDMMYYYY(data.tanggalDirencanakan || /* @__PURE__ */ new Date());
+  const tanggalHMinus1 = data.tanggalHMinus1 || calculateHMinus1(data.tanggalDirencanakan || /* @__PURE__ */ new Date());
+  const rawUlp = data.ulp || "WATAMPONE";
+  const ulpFormatted = rawUlp.toUpperCase().startsWith("ULP") ? rawUlp : `ULP ${rawUlp}`;
+  const instruksiKerja = (data.instruksiKerja || "PEMELIHARAAN JARINGAN DISTRIBUSI 20kV").toUpperCase();
+  const jenisPekerjaan = data.jenisPekerjaan || instruksiKerja;
+  const alamat = data.alamat || "-";
+  const garduInduk = data.garduInduk || "-";
+  const penyulang = data.penyulang || "-";
+  const jenisTiang = data.jenisTiang || "BETON";
+  const ukuranTiang = data.ukuranTiang || "12";
+  const jenisKonduktor = data.jenisKonduktor || "AAAC-S";
+  const ukuranKonduktor = data.ukuranKonduktor || "150";
+  const preparatorName = data.preparatorName || "AKMAL FADIL";
+  const asmanName = data.asmanName || "BAKHTIAR";
+  const asmanBidang = data.asmanBidang || "ASMAN JARINGAN DAN KONSTRUKSI";
+  const namaPP = data.namaPP || "PENGAWAS PEKERJAAN";
+  const noLv3PP = data.noLv3PP || "12345678-L3";
+  const namaPK3 = data.namaPK3 || "PENGAWAS K3";
+  const noLv3PK3 = data.noLv3PK3 || "87654321-L3";
+  const personilReady = data.personilReady ?? 8;
+  const durasiPekerjaan = data.durasiPekerjaan || "3";
+  const tingkatKesulitan = data.tingkatKesulitan || "SEDANG";
+  const kondisiTanah = data.kondisiTanah || "Kering";
+  const jarakJalanRaya = data.jarakJalanRaya || "5 Meter";
+  const opsiBangunan = data.opsiBangunan || "Tidak Ada";
+  const opsiPohon = data.opsiPohon || "Ada (Perlu Blanket / Isolasi)";
+  const opsiSiap = data.opsiSiap || "MAMPU";
+  const opsiJalan = data.opsiJalan || "Perlu Rambu K3 & Traffic Cone";
+  const defaultPersonel = Array.from({ length: 10 }).map((_, idx) => {
+    const p = data.personnelList?.[idx];
+    if (p) return p;
+    return {
+      nama: `Personil PDKB ${idx + 1}`,
+      nip: `1990010${idx + 1}`,
+      noSerkomLv2: `SERKOM-LV2-${idx + 1}`,
+      noSerkomLv3: `SERKOM-LV3-${idx + 1}`,
+      tugas: idx === 0 ? "PENGAWAS PEKERJAAN" : idx === 1 ? "PENGAWAS K3" : idx < 6 ? "LINEMAN" : "GROUNDMAN"
+    };
+  });
+  const photoBase64 = data.fotoUrl ? await loadImageAsBase64(data.fotoUrl) : null;
+  const drawPageBorder = () => {
+    doc.setDrawColor(30, 30, 30);
+    doc.setLineWidth(0.6);
+    doc.rect(margin, margin, contentWidth, contentBottom - margin);
+  };
+  drawPageBorder();
+  const coverHeaderH = 26;
+  doc.setLineWidth(0.4);
+  doc.rect(margin, margin, contentWidth, coverHeaderH);
+  doc.line(margin + 32, margin, margin + 32, margin + coverHeaderH);
+  doc.line(margin + contentWidth - 32, margin, margin + contentWidth - 32, margin + coverHeaderH);
+  drawPlnLogo(doc, margin + 8, margin + 2.5, 12, 15);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10.5);
+  doc.setTextColor(20, 20, 20);
+  doc.text("UNIT INDUK WILAYAH SULSELRABAR", margin + contentWidth / 2, margin + 10, { align: "center" });
+  doc.setFontSize(9.5);
+  doc.text("UNIT PELAKSANA PELAYANAN PELANGGAN WATAMPONE", margin + contentWidth / 2, margin + 16, { align: "center" });
+  drawPdkbLogo(doc, margin + contentWidth - 25, margin + 3.5, 16);
+  const titleY = margin + 68;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(10, 10, 10);
+  doc.text("DOKUMEN PELAKSANAAN PEKERJAAN DALAM KEADAAN BERTEGANGAN", margin + contentWidth / 2, titleY, { align: "center" });
+  doc.setFontSize(11);
+  doc.text(`[ ${instruksiKerja} ]`, margin + contentWidth / 2, titleY + 7, { align: "center" });
+  doc.text("PDKB TM", margin + contentWidth / 2, titleY + 14, { align: "center" });
+  const metaY = titleY + 35;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(20, 20, 20);
+  doc.text(`SP2B NO  :  ${inputNoSp2b} /UP3 WATAMPONE/PDKB-TM/${bulanRomawi}/${tahunSaatIni}`, margin + 16, metaY);
+  doc.text(`TANGGAL  :  ${tanggalDirencanakan}`, margin + 120, metaY);
+  doc.text(`SP3B NO  :  ${inputNoSp2b} /UP3 WATAMPONE/PDKB-TM/${bulanRomawi}/${tahunSaatIni}`, margin + 16, metaY + 18);
+  doc.text(`TANGGAL  :  ${tanggalDirencanakan}`, margin + 120, metaY + 18);
+  const listY = metaY + 50;
+  const listRows = [
+    ["JENIS PEKERJAAN", `: ${jenisPekerjaan}`],
+    ["NO WORK ORDER", `: ${inputNoWo}/WO/UP3 WATAMPONE.PREP/${bulanRomawi}/${tahunSaatIni}`],
+    ["LOKASI", `: ${alamat}`],
+    ["NO. TIANG", `: ${inputNoTiang}`],
+    ["PENYULANG", `: ${penyulang}`],
+    ["GARDU INDUK", `: ${garduInduk}`],
+    ["ULP", `: ${ulpFormatted}`]
+  ];
+  let curListY = listY;
+  listRows.forEach(([lbl, val]) => {
+    doc.setFont("helvetica", "bold");
+    doc.text(lbl, margin + 16, curListY);
+    doc.setFont("helvetica", "normal");
+    doc.text(val, margin + 55, curListY);
+    curListY += 7.5;
+  });
+  doc.addPage();
+  drawPageBorder();
+  const p2HeaderH = 22;
+  doc.setLineWidth(0.4);
+  doc.rect(margin, margin, contentWidth, p2HeaderH);
+  doc.line(margin + 55, margin, margin + 55, margin + p2HeaderH);
+  doc.line(margin + contentWidth - 70, margin, margin + contentWidth - 70, margin + p2HeaderH);
+  drawPlnLogo(doc, margin + 3, margin + 2, 9, 12);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.text("UIW SULSELRABAR", margin + 15, margin + 7);
+  doc.text("UP3 WATAMPONE", margin + 15, margin + 12);
+  doc.setFontSize(9.5);
+  doc.text("Hasil Survey Lokasi Pekerjaan", margin + 55 + (contentWidth - 125) / 2, margin + 12, { align: "center" });
+  doc.setFontSize(7);
+  doc.text(`NO. ${inputNoSp2b} /UP3 WATAMPONE/PDKB-TM/${bulanRomawi}/${tahunSaatIni}`, margin + contentWidth - 67, margin + 8);
+  doc.text(`TANGGAL : ${tanggalDirencanakan}`, margin + contentWidth - 67, margin + 14);
+  let p2SubY = margin + p2HeaderH + 4;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.text("SOP PDKB-TM NO 01 (KOMISI PDKB)", margin + 3, p2SubY);
+  const sopMetaRows = [
+    ["Jenis Pekerjaan", `: ${instruksiKerja}`],
+    ["No Work Order", `: ${inputNoWo}/WO/UP3 WATAMPONE.PREP/${bulanRomawi}/${tahunSaatIni}`],
+    ["Lokasi", `: ${alamat}`],
+    ["UP3", ": UP3 WATAMPONE"],
+    ["ULP", `: ${ulpFormatted}`],
+    ["No Tiang/Penyulang", `: ${inputNoTiang}/ ${penyulang}`],
+    ["Gardu Induk", `: GI 20KV ${garduInduk}`]
+  ];
+  p2SubY += 4;
+  sopMetaRows.forEach(([lbl, val]) => {
+    doc.setFont("helvetica", "normal");
+    doc.text(lbl, margin + 3, p2SubY);
+    doc.text(val, margin + 35, p2SubY);
+    p2SubY += 4;
+  });
+  autoTable(doc, {
+    startY: p2SubY + 1,
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
+    theme: "grid",
+    headStyles: {
+      fillColor: [255, 255, 255],
+      textColor: [20, 20, 20],
+      fontStyle: "bold",
+      fontSize: 7,
+      halign: "center",
+      lineColor: [30, 30, 30],
+      lineWidth: 0.35
+    },
+    styles: {
+      fontSize: 6.5,
+      textColor: [20, 20, 20],
+      cellPadding: 1.5,
+      lineColor: [30, 30, 30],
+      lineWidth: 0.35
+    },
+    columnStyles: {
+      0: { cellWidth: 90, fontStyle: "bold" },
+      1: { cellWidth: contentWidth - 90 }
+    },
+    head: [["DATA LOKASI", "HASIL PENELITIAN"]],
+    body: [
+      ["1. Identifikasi Struktur Tanah", kondisiTanah],
+      ["2. Jarak Lokasi Pekerjaan Ke Jalan", jarakJalanRaya],
+      ["3. Dikerjakan / Orang", `${personilReady} Orang / Regu`],
+      ["4. Lama Waktu Pengerjaan", `${durasiPekerjaan} Jam`],
+      ["5. Tingkat Kesulitan", tingkatKesulitan],
+      ["6. Dekat Dengan Bangunan", opsiBangunan],
+      ["7. Banyak Pohon", opsiPohon],
+      ["8. Jenis Tiang", `${jenisTiang} ${ukuranTiang} Meter`],
+      ["9. Penampang", `${jenisKonduktor} ${ukuranKonduktor} sqmm`],
+      ["10. DiKerjakan dengan PDKB-TM", opsiSiap],
+      ["11. Lain - Lain", "-"]
+    ]
+  });
+  const dispStartY = doc.lastAutoTable.finalY + 2;
+  autoTable(doc, {
+    startY: dispStartY,
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
+    theme: "grid",
+    headStyles: {
+      fillColor: [255, 255, 255],
+      textColor: [20, 20, 20],
+      fontStyle: "bold",
+      fontSize: 6.5,
+      halign: "center",
+      lineColor: [30, 30, 30],
+      lineWidth: 0.35
+    },
+    styles: {
+      fontSize: 6,
+      textColor: [20, 20, 20],
+      cellPadding: 1.5,
+      lineColor: [30, 30, 30],
+      lineWidth: 0.35
+    },
+    columnStyles: {
+      0: { cellWidth: 65 },
+      1: { cellWidth: 20, halign: "center" },
+      2: { cellWidth: contentWidth - 85 }
+    },
+    head: [["PREPARATOR / SURVEYOR", "PARAF", "MATERIAL YANG DIGUNAKAN"]],
+    body: [
+      [
+        `Nama : ${preparatorName}
+Diperiksa Tanggal : ${tanggalHMinus1}
+Dikerjakan Tanggal : ${tanggalDirencanakan}`,
+        "[paraf]",
+        "-"
+      ]
+    ]
+  });
+  const disp2StartY = doc.lastAutoTable.finalY;
+  autoTable(doc, {
+    startY: disp2StartY,
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
+    theme: "grid",
+    headStyles: {
+      fillColor: [255, 255, 255],
+      textColor: [20, 20, 20],
+      fontStyle: "bold",
+      fontSize: 6.5,
+      halign: "center",
+      lineColor: [30, 30, 30],
+      lineWidth: 0.35
+    },
+    styles: {
+      fontSize: 6,
+      textColor: [20, 20, 20],
+      cellPadding: 1.5,
+      lineColor: [30, 30, 30],
+      lineWidth: 0.35
+    },
+    columnStyles: {
+      0: { cellWidth: 65 },
+      1: { cellWidth: 35, halign: "center" },
+      2: { cellWidth: 20, halign: "center" },
+      3: { cellWidth: contentWidth - 120 }
+    },
+    head: [["DISPOSISI", "TANGGAL", "PARAF", "KETERANGAN"]],
+    body: [
+      ["ASMAN JARINGAN / Kepala Operasi Mengetahui", tanggalHMinus1, "[paraf]", "-"],
+      ["TEAM LEADER PDKB Setuju / Tidak Setuju", tanggalHMinus1, "[paraf]", "-"]
+    ]
+  });
+  const p2BoxTopY = doc.lastAutoTable.finalY + 4;
+  const p2BoxH = contentBottom - p2BoxTopY - 2;
+  const p2BoxW = (contentWidth - 6) / 2;
+  doc.rect(margin + 2, p2BoxTopY, p2BoxW, p2BoxH);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7);
+  doc.text("GAMBAR LOKASI", margin + 2 + p2BoxW / 2, p2BoxTopY - 1.5, { align: "center" });
+  doc.rect(margin + 4 + p2BoxW, p2BoxTopY, p2BoxW, p2BoxH);
+  doc.text("PETA LOKASI", margin + 4 + p2BoxW + p2BoxW / 2, p2BoxTopY - 1.5, { align: "center" });
+  if (photoBase64) {
+    try {
+      doc.addImage(photoBase64, "JPEG", margin + 3, p2BoxTopY + 1, p2BoxW - 2, p2BoxH - 2);
+    } catch (e) {
+    }
+  } else {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(120, 120, 120);
+    doc.text("[foto_temuan]", margin + 2 + p2BoxW / 2, p2BoxTopY + p2BoxH / 2, { align: "center" });
+  }
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(120, 120, 120);
+  doc.text("[CAPTURE MAP]", margin + 4 + p2BoxW + p2BoxW / 2, p2BoxTopY + p2BoxH / 2, { align: "center" });
+  doc.addPage();
+  drawPageBorder();
+  drawPlnLogo(doc, margin + 4, margin + 3, 10, 13);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(20, 20, 20);
+  doc.text("UIW SULSELRABAR", margin + 17, margin + 8);
+  doc.text("UP3 WATAMPONE", margin + 17, margin + 13);
+  let p3Y = margin + 28;
+  doc.setFontSize(8.5);
+  doc.text("SOP PDKB-TM NO 04.1 (KOMISI PDKB)", margin + 8, p3Y);
+  p3Y += 9;
+  doc.setFontSize(10.5);
+  doc.text("SURAT PERINTAH MELAKSANAKAN PEKERJAAN BERTEGANGAN (SP2B)", margin + contentWidth / 2, p3Y, { align: "center" });
+  p3Y += 8;
+  doc.setFontSize(8.5);
+  doc.text(`NO. ${inputNoSp2b} /UP3 WATAMPONE/PDKB TM/${bulanRomawi}/${tahunSaatIni}`, margin + contentWidth / 2, p3Y, { align: "center" });
+  p3Y += 5;
+  doc.text(`TANGGAL : ${tanggalDirencanakan}`, margin + contentWidth / 2, p3Y, { align: "center" });
+  p3Y += 14;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  const p3Text1 = `Kepala Operasi atau wakilnya ${asmanName} dengan ini memerintahkan kepada pelaksana PDKB (Nama dan No Sertifikat Kewenangan terlampir) untuk melaksanakan pekerjaan.`;
+  doc.text(doc.splitTextToSize(p3Text1, contentWidth - 16), margin + 8, p3Y);
+  p3Y += 15;
+  doc.text(`- Pada instalasi berikut ini`, margin + 8, p3Y);
+  doc.text(`Tiang HL / Penyulang`, margin + 50, p3Y);
+  doc.text(`: [ ${inputNoTiang} ] / [ ${penyulang} ]`, margin + 88, p3Y);
+  p3Y += 6;
+  doc.text(`Gardu Induk`, margin + 50, p3Y);
+  doc.text(`: GI 20KV ${garduInduk}`, margin + 88, p3Y);
+  p3Y += 10;
+  doc.text(`- Pekerjaan dalam keadaan bertegangan berikut ini :`, margin + 8, p3Y);
+  p3Y += 7;
+  doc.text(`Pekerjaan`, margin + 14, p3Y);
+  doc.text(`: ${instruksiKerja}`, margin + 60, p3Y);
+  p3Y += 7;
+  doc.text(`Menggunakan Metode`, margin + 14, p3Y);
+  doc.setFont("helvetica", "bold");
+  doc.text(`: METODE BERJARAK`, margin + 60, p3Y);
+  p3Y += 7;
+  doc.setFont("helvetica", "normal");
+  doc.text(`Pembatas yang bersifat setempat.`, margin + 14, p3Y);
+  const p3SignY = margin + 180;
+  const p3SignX = margin + contentWidth - 45;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.text(`WATAMPONE, ${tanggalDirencanakan}`, p3SignX, p3SignY, { align: "center" });
+  doc.text("Mengetahui,", p3SignX, p3SignY + 5, { align: "center" });
+  doc.setFont("helvetica", "bold");
+  doc.text("KEPALA OPERASI", p3SignX, p3SignY + 10, { align: "center" });
+  doc.text(asmanName, p3SignX, p3SignY + 36, { align: "center" });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.text(asmanBidang, p3SignX, p3SignY + 40, { align: "center" });
+  doc.addPage();
+  drawPageBorder();
+  drawPlnLogo(doc, margin + 4, margin + 3, 10, 13);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(20, 20, 20);
+  doc.text("UIW SULSELRABAR", margin + 17, margin + 8);
+  doc.text("UP3 WATAMPONE", margin + 17, margin + 13);
+  let p4Y = margin + 28;
+  doc.setFontSize(8.5);
+  doc.text("SOP PDKB-TM NO 04.2 (KOMISI PDKB)", margin + 8, p4Y);
+  p4Y += 9;
+  doc.setFontSize(10.5);
+  doc.text("SURAT PERINTAH MELAKSANAKAN PEKERJAAN BERTEGANGAN (SP2B)", margin + contentWidth / 2, p4Y, { align: "center" });
+  p4Y += 7;
+  doc.setFontSize(8.5);
+  doc.text(`NO. ${inputNoSp2b} /UP3 WATAMPONE/PDKB TM/${bulanRomawi}/${tahunSaatIni}`, margin + contentWidth / 2, p4Y, { align: "center" });
+  p4Y += 5;
+  doc.text(`TANGGAL : ${tanggalDirencanakan}`, margin + contentWidth / 2, p4Y, { align: "center" });
+  const p4TableBody = defaultPersonel.map((p, idx) => {
+    let cert = p.noSerkomLv2 || "-";
+    if (p.tugas === "PENGAWAS PEKERJAAN" || p.tugas === "PENGAWAS K3") {
+      cert = p.noSerkomLv3 || p.noSerkomLv2 || "-";
+    }
+    const profilStr = `${p.nama}-${p.nip}
+(No Sertifikat : ${cert})`;
+    return [String(idx + 1), profilStr, p.tugas || "LINEMAN", ""];
+  });
+  autoTable(doc, {
+    startY: p4Y + 6,
+    margin: { left: margin + 6, right: margin + 6 },
+    tableWidth: contentWidth - 12,
+    theme: "grid",
+    headStyles: {
+      fillColor: [255, 255, 255],
+      textColor: [20, 20, 20],
+      fontStyle: "bold",
+      fontSize: 7.5,
+      halign: "center",
+      lineColor: [30, 30, 30],
+      lineWidth: 0.35
+    },
+    styles: {
+      fontSize: 7,
+      textColor: [20, 20, 20],
+      cellPadding: 2,
+      lineColor: [30, 30, 30],
+      lineWidth: 0.35
+    },
+    columnStyles: {
+      0: { cellWidth: 10, halign: "center" },
+      1: { cellWidth: 80 },
+      2: { cellWidth: 55, halign: "center" },
+      3: { cellWidth: 33, halign: "center" }
+    },
+    head: [["NO", "PEGAWAI", "TUGAS DAN TANGGUNG JAWAB", "TANDA TANGAN"]],
+    body: p4TableBody
+  });
+  const p4FootY = doc.lastAutoTable.finalY + 6;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(30, 30, 30);
+  doc.text("A Menerangkan telah menerima surat perintah untuk melaksanakan pekerjaan bertegangan", margin + 8, p4FootY);
+  doc.setFont("helvetica", "bold");
+  doc.text(`   [ ${inputNoSp2b} /UP3 WATAMPONE/PDKB TM/${bulanRomawi}/${tahunSaatIni} ]`, margin + 8, p4FootY + 4);
+  doc.setFont("helvetica", "normal");
+  doc.text("B Menerangkan telah memperhatikan dan mengerti", margin + 8, p4FootY + 10);
+  doc.text("   - Pekerjaan yang oleh surat perintah ini diberikan kewenangan kepadanya untuk dilaksanakan atau telah melaksanakan dalam", margin + 8, p4FootY + 14);
+  doc.text("     keadaan bertegangan", margin + 8, p4FootY + 18);
+  doc.text("   - Metode yang diizinkan untuk digunakan : METODE BERJARAK", margin + 8, p4FootY + 22);
+  doc.text("   - Pembatasan bersifat setempat yang dikenakan kepadanya", margin + 8, p4FootY + 26);
+  doc.text("C Tidak menyerahkan pekerjaan ini, kecuali pada operator yang memiliki kewenangan yang sesuai", margin + 8, p4FootY + 32);
+  doc.addPage();
+  drawPageBorder();
+  drawPlnLogo(doc, margin + 4, margin + 3, 10, 13);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(20, 20, 20);
+  doc.text("UIW SULSELRABAR", margin + 17, margin + 8);
+  doc.text("UP3 WATAMPONE", margin + 17, margin + 13);
+  let p5Y = margin + 28;
+  doc.setFontSize(8.5);
+  doc.text("SOP PDKB-TM NO 05 (KOMISI PDKB)", margin + 8, p5Y);
+  p5Y += 9;
+  doc.setFontSize(10.5);
+  doc.text("SURAT PERINTAH PENGAWASAN PEKERJAAN BERTEGANGAN (SP3B)", margin + contentWidth / 2, p5Y, { align: "center" });
+  p5Y += 7;
+  doc.setFontSize(8.5);
+  doc.text(`NO. ${inputNoSp2b} /UP3 WATAMPONE/PDKB TM/${bulanRomawi}/${tahunSaatIni}`, margin + contentWidth / 2, p5Y, { align: "center" });
+  p5Y += 5;
+  doc.text(`TANGGAL : ${tanggalDirencanakan}`, margin + contentWidth / 2, p5Y, { align: "center" });
+  p5Y += 12;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.text(`Kepala Operasi atau wakilnya,  ${asmanName}`, margin + 8, p5Y);
+  p5Y += 8;
+  doc.text(`- Memberikan kewenangan kepada pengawas pekerjaan`, margin + 8, p5Y);
+  doc.text(`: ${namaPP}`, margin + 90, p5Y);
+  p5Y += 6;
+  doc.text(`- Pemegang sertifikat kewenangan no`, margin + 8, p5Y);
+  doc.text(`: ${noLv3PP}`, margin + 90, p5Y);
+  p5Y += 6;
+  doc.text(`- Memberikan kewenangan kepada pengawas K3`, margin + 8, p5Y);
+  doc.text(`: ${namaPK3}`, margin + 90, p5Y);
+  p5Y += 6;
+  doc.text(`  Pemegang sertifikat kewenangan no`, margin + 8, p5Y);
+  doc.text(`: ${noLv3PK3}`, margin + 90, p5Y);
+  p5Y += 10;
+  doc.setFont("helvetica", "bold");
+  doc.text("Untuk Melaksanakan Pengawasan PDKB Pada Instalasi Berikut Ini :", margin + 8, p5Y);
+  p5Y += 7;
+  doc.setFont("helvetica", "normal");
+  doc.text("Jenis Pekerjaan yang Dilakukan", margin + 8, p5Y);
+  doc.text(`: ${instruksiKerja}`, margin + 85, p5Y);
+  p5Y += 6;
+  doc.text("Cara Operasi yang Dipilih Oleh Pengawas Pekerjaan", margin + 8, p5Y);
+  doc.text(": METODE BERJARAK", margin + 85, p5Y);
+  p5Y += 6;
+  doc.setFont("helvetica", "bold");
+  doc.text("Syarat Operasi Khusus ( Kategori Kedua dan Ketiga )", margin + 8, p5Y);
+  p5Y += 6;
+  doc.setFont("helvetica", "normal");
+  doc.text("Hubungan Komunikasi dengan Lokasi", margin + 8, p5Y);
+  doc.text(": HANDIE TALKIE", margin + 85, p5Y);
+  p5Y += 6;
+  doc.text("Keterangan tambahan", margin + 8, p5Y);
+  doc.text(":", margin + 85, p5Y);
+  p5Y += 6;
+  doc.text("Kewenangan Berlaku Selama", margin + 8, p5Y);
+  doc.text(": 1 Hari", margin + 85, p5Y);
+  const p5SignY = margin + 175;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.text("MENGETAHUI,", margin + 35, p5SignY, { align: "center" });
+  doc.text("ASMAN RING DAN KONS DIST", margin + 35, p5SignY + 4.5, { align: "center" });
+  doc.text(asmanName, margin + 35, p5SignY + 36, { align: "center" });
+  const p5RightX = margin + contentWidth - 45;
+  doc.setFont("helvetica", "normal");
+  doc.text(`WATAMPONE, ${tanggalDirencanakan}`, p5RightX, p5SignY, { align: "center" });
+  doc.setFont("helvetica", "bold");
+  doc.text("TEAM LEADER PDKB", p5RightX, p5SignY + 4.5, { align: "center" });
+  doc.text(asmanName, p5RightX, p5SignY + 36, { align: "center" });
+  doc.text("PENGAWAS PEKERJAAN", p5RightX, p5SignY + 48, { align: "center" });
+  doc.text(namaPP, p5RightX, p5SignY + 70, { align: "center" });
+  doc.text("PENGAWAS K3", p5RightX, p5SignY + 82, { align: "center" });
+  doc.text(namaPK3, p5RightX, p5SignY + 104, { align: "center" });
+  doc.addPage();
+  drawPageBorder();
+  drawPlnLogo(doc, margin + 4, margin + 3, 10, 13);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(20, 20, 20);
+  doc.text("UIW SULSELRABAR", margin + 17, margin + 8);
+  doc.text("UP3 WATAMPONE", margin + 17, margin + 13);
+  let p6Y = margin + 28;
+  doc.setFontSize(8.5);
+  doc.text("SOP PDKB-TM NO 06 (KOMISI PDKB)", margin + 8, p6Y);
+  p6Y += 8;
+  doc.setFontSize(10);
+  doc.text("ANALISA PEKERJAAN DAN PEMBAGIAN TUGAS (TAILGATE SESSION)", margin + contentWidth / 2, p6Y, { align: "center" });
+  p6Y += 4;
+  autoTable(doc, {
+    startY: p6Y,
+    margin: { left: margin + 6, right: margin + 6 },
+    tableWidth: contentWidth - 12,
+    theme: "grid",
+    styles: {
+      fontSize: 7,
+      textColor: [20, 20, 20],
+      cellPadding: 1.5,
+      lineColor: [30, 30, 30],
+      lineWidth: 0.35
+    },
+    columnStyles: {
+      0: { cellWidth: 50, fontStyle: "bold" },
+      1: { cellWidth: contentWidth - 62 }
+    },
+    body: [
+      ["Pengawas Pekerjaan", `: ${namaPP}`],
+      ["Pengawas K3", `: ${namaPK3}`],
+      ["Jenis Pekerjaan", `: ${instruksiKerja}`],
+      ["Instruksi Kerja Nomor", ": -"],
+      ["Penyulang", `: ${penyulang}`],
+      ["Penanggung Jawab", ": MANAGER BAGIAN JARINGAN"]
+    ]
+  });
+  const p6PersonelTableY = doc.lastAutoTable.finalY + 2;
+  autoTable(doc, {
+    startY: p6PersonelTableY,
+    margin: { left: margin + 6, right: margin + 6 },
+    tableWidth: contentWidth - 12,
+    theme: "grid",
+    headStyles: {
+      fillColor: [255, 255, 255],
+      textColor: [20, 20, 20],
+      fontStyle: "bold",
+      fontSize: 7,
+      halign: "center",
+      lineColor: [30, 30, 30],
+      lineWidth: 0.35
+    },
+    styles: {
+      fontSize: 6.5,
+      textColor: [20, 20, 20],
+      cellPadding: 1.5,
+      lineColor: [30, 30, 30],
+      lineWidth: 0.35
+    },
+    columnStyles: {
+      0: { cellWidth: 10, halign: "center" },
+      1: { cellWidth: 80 },
+      2: { cellWidth: 55, halign: "center" },
+      3: { cellWidth: 33, halign: "center" }
+    },
+    head: [["NO", "PEGAWAI", "TUGAS DAN TANGGUNG JAWAB", "TANDA TANGAN"]],
+    body: p4TableBody
+  });
+  const p6HazardY = doc.lastAutoTable.finalY + 3;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.5);
+  doc.text("Identifikasi Hazard", margin + 6, p6HazardY);
+  autoTable(doc, {
+    startY: p6HazardY + 1.5,
+    margin: { left: margin + 6, right: margin + 6 },
+    tableWidth: contentWidth - 12,
+    theme: "grid",
+    headStyles: {
+      fillColor: [255, 255, 255],
+      textColor: [20, 20, 20],
+      fontStyle: "bold",
+      fontSize: 6.5,
+      halign: "center",
+      lineColor: [30, 30, 30],
+      lineWidth: 0.35
+    },
+    styles: {
+      fontSize: 6.5,
+      textColor: [20, 20, 20],
+      cellPadding: 1.5,
+      lineColor: [30, 30, 30],
+      lineWidth: 0.35
+    },
+    columnStyles: {
+      0: { cellWidth: 50, fontStyle: "bold" },
+      1: { cellWidth: contentWidth - 62 }
+    },
+    head: [["HAZARD", "CARA MENGATASI (ELIMINATE, ISOLATE & MINIMISE)"]],
+    body: [
+      ["Bangunan", opsiBangunan],
+      ["Pohon", opsiPohon],
+      ["Jalan Lalu Lintas", opsiJalan],
+      ["Jaringan Listrik", "YA"],
+      ["Lain - Lain", "-"]
+    ]
+  });
+  return doc;
+}
+
 // src/utils/googleDocPdfFiller.ts
+import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 var GOOGLE_DOC_TEMPLATES = {
   WORK_ORDER: "17le09DrRAqCtmdBQWtWqsD-KO-2td3eTSVXn_mg5r_o",
   SP2B_SP3B: "1kdpZFjeu356d-vF16ph9oZhuPKHZAueBdO3mDmr7lso"
 };
-async function fetchGoogleDocPdfBytes(docId) {
-  const url = `https://docs.google.com/document/d/${docId}/export?format=pdf`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Gagal mengunduh template Google Docs (HTTP ${res.status}). Pastikan file diset "Anyone with the link can view".`);
-  }
-  return await res.arrayBuffer();
-}
-async function getImageBytes(imageSource) {
-  if (!imageSource) return null;
-  try {
-    if (imageSource.startsWith("data:image")) {
-      const isPng = imageSource.includes("image/png");
-      const cleanBase64 = imageSource.split(",")[1];
-      let bytes;
-      if (typeof Buffer !== "undefined") {
-        bytes = new Uint8Array(Buffer.from(cleanBase64, "base64"));
-      } else {
-        const binaryString = atob(cleanBase64);
-        const len = binaryString.length;
-        bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-      }
-      return { bytes: bytes.buffer, format: isPng ? "png" : "jpeg" };
-    }
-    let url = imageSource.trim();
-    if (url.includes("drive.google.com") || url.includes("docs.google.com")) {
-      const match = url.match(/id=([a-zA-Z0-9_-]+)/) || url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-      if (match && match[1]) {
-        url = `https://drive.google.com/thumbnail?id=${match[1]}&sz=w1000`;
-      }
-    }
-    if (url.startsWith("http")) {
-      const res = await fetch(url, {
-        headers: { "User-Agent": "Mozilla/5.0" }
-      });
-      if (res.ok) {
-        const ct = res.headers.get("content-type") || "";
-        if (ct.includes("image") || ct.includes("octet-stream")) {
-          const buf = await res.arrayBuffer();
-          return { bytes: buf, format: ct.includes("png") ? "png" : "jpeg" };
-        }
-      }
-      if (imageSource.includes("drive.google.com") || imageSource.includes("docs.google.com")) {
-        const match = imageSource.match(/id=([a-zA-Z0-9_-]+)/) || imageSource.match(/\/d\/([a-zA-Z0-9_-]+)/);
-        if (match && match[1]) {
-          const resFallback = await fetch(`https://drive.google.com/uc?export=download&id=${match[1]}`, {
-            headers: { "User-Agent": "Mozilla/5.0" }
-          });
-          if (resFallback.ok) {
-            const ct = resFallback.headers.get("content-type") || "";
-            if (ct.includes("image")) {
-              const buf = await resFallback.arrayBuffer();
-              return { bytes: buf, format: ct.includes("png") ? "png" : "jpeg" };
-            }
-          }
-        }
-      }
-    }
-  } catch (e) {
-    console.warn("Gagal memproses gambar:", e);
-  }
-  return null;
-}
-function formatDateString(rawDate) {
-  if (!rawDate || rawDate === "-") return "-";
-  try {
-    const d = new Date(rawDate);
-    if (!isNaN(d.getTime())) {
-      const day = String(d.getDate()).padStart(2, "0");
-      const month = String(d.getMonth() + 1).padStart(2, "0");
-      const year = d.getFullYear();
-      return `${day}/${month}/${year}`;
-    }
-  } catch (e) {
-  }
-  return String(rawDate).split("T")[0];
-}
-async function generateFilledWorkOrderGoogleDocPdf(data, customTemplateDocId) {
-  const docId = customTemplateDocId || GOOGLE_DOC_TEMPLATES.WORK_ORDER;
-  const templateBuffer = await fetchGoogleDocPdfBytes(docId);
-  const pdfDoc = await PDFDocument.load(templateBuffer);
-  const page = pdfDoc.getPage(0);
-  const H = page.getHeight();
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const noWoStr = data.inputNoWo || "001";
-  const bulan = data.bulan || "IX";
-  const tahun = data.tahun || (/* @__PURE__ */ new Date()).getFullYear().toString();
-  const formattedTglSurvey = formatDateString(data.tanggalSurvey);
-  page.drawRectangle({
-    x: 386,
-    y: H - 85,
-    width: 194,
-    height: 58,
-    color: rgb(1, 1, 1)
-  });
-  page.drawText(`NO : ${noWoStr}/WO/UP3 WATAMPONE.PREP/${bulan}/${tahun}`, {
-    x: 390,
-    y: H - 52,
-    size: 7.5,
-    font: boldFont,
-    color: rgb(0, 0, 0)
-  });
-  page.drawText(`( ${formattedTglSurvey} )`, {
-    x: 390,
-    y: H - 70,
-    size: 7.5,
-    font,
-    color: rgb(0, 0, 0)
-  });
-  const fillCell = (topY, h, text, isBold = false, fontSize = 8.5) => {
-    const topX = 187;
-    const w = 393;
-    const pdfY = H - topY - h;
-    page.drawRectangle({
-      x: topX + 1,
-      y: pdfY + 1,
-      width: w - 2,
-      height: h - 2,
-      color: rgb(1, 1, 1)
-    });
-    page.drawText(text, {
-      x: topX + 5,
-      y: pdfY + (h - fontSize) / 2 + 1,
-      size: fontSize,
-      font: isBold ? boldFont : font,
-      color: rgb(0, 0, 0)
-    });
-  };
-  fillCell(121, 15, `${noWoStr}/WO/UP3 WATAMPONE.PREP/${bulan}/${tahun}`);
-  fillCell(136, 15, data.ulp ? data.ulp.toUpperCase().startsWith("ULP") ? data.ulp : `ULP ${data.ulp}` : "ULP WATAMPONE");
-  fillCell(151, 26, data.instruksiKerja || "-");
-  fillCell(177, 15, data.alamat || "-");
-  fillCell(192, 15, data.inputNoTiang || "-");
-  fillCell(207, 15, `GI 20KV ${data.garduInduk || "-"} | ${data.penyulang || "-"}`);
-  fillCell(222, 15, `${data.jenisTiang || "BETON"} | ${data.ukuranTiang || "12"} Meter`);
-  fillCell(237, 15, `${data.jenisKonduktor || "AAAC-S"} | ${data.ukuranKonduktor || "150"} sqmm`);
-  fillCell(252, 15, data.preparator || "AKMAL FADIL", true);
-  page.drawRectangle({
-    x: 350,
-    y: H - 374,
-    width: 228,
-    height: 22,
-    color: rgb(1, 1, 1)
-  });
-  const asmanText = `( ${data.asman || "BAKHTIAR"} )`;
-  const asmanFontSize = 8.5;
-  const asmanTextWidth = boldFont.widthOfTextAtSize(asmanText, asmanFontSize);
-  const asmanCenterX = 494.17;
-  const asmanStartX = asmanCenterX - asmanTextWidth / 2;
-  page.drawText(asmanText, {
-    x: asmanStartX,
-    y: H - 368,
-    size: asmanFontSize,
-    font: boldFont,
-    color: rgb(0, 0, 0)
-  });
-  const imgBoxTopY = 401;
-  const imgBoxH = 268;
-  const imgBoxPdfY = H - imgBoxTopY - imgBoxH;
-  if (data.fotoUrl) {
-    const photo = await getImageBytes(data.fotoUrl);
-    if (photo) {
-      try {
-        const embeddedImg = photo.format === "png" ? await pdfDoc.embedPng(photo.bytes) : await pdfDoc.embedJpg(photo.bytes);
-        page.drawRectangle({
-          x: 18,
-          y: imgBoxPdfY + 2,
-          width: 279,
-          height: imgBoxH - 4,
-          color: rgb(1, 1, 1)
-        });
-        const imgDims = embeddedImg.scaleToFit(275, imgBoxH - 8);
-        const imgX = 18 + (279 - imgDims.width) / 2;
-        const imgY = imgBoxPdfY + 2 + (imgBoxH - 4 - imgDims.height) / 2;
-        page.drawImage(embeddedImg, {
-          x: imgX,
-          y: imgY,
-          width: imgDims.width,
-          height: imgDims.height
-        });
-      } catch (errImg) {
-        console.warn("Gagal menempelkan foto:", errImg);
-      }
-    }
-  }
-  page.drawRectangle({
-    x: 301,
-    y: imgBoxPdfY + 2,
-    width: 279,
-    height: imgBoxH - 4,
-    color: rgb(0.96, 0.97, 0.99)
-  });
-  const mapUrl = data.mapUrl || (data.koordinat ? getStaticMapImageUrl(data.koordinat) : "");
-  let mapDrawn = false;
-  if (mapUrl) {
-    const mapImg = await getImageBytes(mapUrl);
-    if (mapImg) {
-      try {
-        const embeddedMap = mapImg.format === "png" ? await pdfDoc.embedPng(mapImg.bytes) : await pdfDoc.embedJpg(mapImg.bytes);
-        const mapDims = embeddedMap.scaleToFit(275, imgBoxH - 32);
-        const mapX = 301 + (279 - mapDims.width) / 2;
-        const mapY = imgBoxPdfY + 28 + (imgBoxH - 32 - mapDims.height) / 2;
-        page.drawImage(embeddedMap, {
-          x: mapX,
-          y: mapY,
-          width: mapDims.width,
-          height: mapDims.height
-        });
-        mapDrawn = true;
-      } catch (errMap) {
-        console.warn("Gagal menempelkan peta lokasi:", errMap);
-      }
-    }
-  }
-  page.drawRectangle({
-    x: 303,
-    y: imgBoxPdfY + 3,
-    width: 275,
-    height: 24,
-    color: rgb(0.92, 0.95, 0.98)
-  });
-  page.drawText(`TITIK KOORDINAT: ${data.koordinat || "Data GPS Terverifikasi"}`, {
-    x: 308,
-    y: imgBoxPdfY + 15,
-    size: 7,
-    font: boldFont,
-    color: rgb(0.1, 0.25, 0.45)
-  });
-  page.drawText(`GI: ${data.garduInduk || "-"} | PENYULANG: ${data.penyulang || "-"} | NO TIANG: ${data.inputNoTiang || "-"}`, {
-    x: 308,
-    y: imgBoxPdfY + 6,
-    size: 6.5,
-    font,
-    color: rgb(0.25, 0.25, 0.25)
-  });
-  if (!mapDrawn) {
-    page.drawText("DATA LOKASI & KOORDINAT TERVERIFIKASI", {
-      x: 315,
-      y: imgBoxPdfY + imgBoxH - 30,
-      size: 8,
-      font: boldFont,
-      color: rgb(0.1, 0.25, 0.4)
-    });
-    page.drawText(`ALAMAT: ${data.alamat || "-"}`, {
-      x: 315,
-      y: imgBoxPdfY + imgBoxH - 50,
-      size: 7.5,
-      font,
-      color: rgb(0.2, 0.2, 0.2)
-    });
-  }
-  return await pdfDoc.save();
-}
-async function generateFilledSp2bSp3bGoogleDocPdf(data, customTemplateDocId) {
-  const docId = customTemplateDocId || GOOGLE_DOC_TEMPLATES.SP2B_SP3B;
-  const templateBuffer = await fetchGoogleDocPdfBytes(docId);
-  const pdfDoc = await PDFDocument.load(templateBuffer);
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const H = 842;
-  const noSp2b = data.inputNoSp2b || "001";
-  const noWo = data.inputNoWo || "001";
-  const bulan = data.bulan || "IX";
-  const tahun = data.tahun || (/* @__PURE__ */ new Date()).getFullYear().toString();
-  const tglRencana = formatDateString(data.tanggalDirencanakan);
-  const tglHMinus1 = formatDateString(data.tanggalHMinus1);
-  const eraseAndWrite = (p, x, yFromTop, w, h, text, isBold = false, size = 8.5) => {
-    const pdfY = H - yFromTop - h;
-    p.drawRectangle({
-      x: x + 1,
-      y: pdfY + 1,
-      width: w - 2,
-      height: h - 2,
-      color: rgb(1, 1, 1)
-    });
-    p.drawText(text, {
-      x: x + 3,
-      y: pdfY + (h - size) / 2 + 1,
-      size,
-      font: isBold ? boldFont : font,
-      color: rgb(0, 0, 0)
-    });
-  };
-  const page1 = pdfDoc.getPage(0);
-  eraseAndWrite(page1, 137, 332, 240, 20, data.instruksiKerja || "-", true, 9.5);
-  eraseAndWrite(page1, 140, 407, 238, 18, `${noSp2b} /UP3 WATAMPONE/PDKB-TM/${bulan}/${tahun}`);
-  eraseAndWrite(page1, 450, 407, 100, 18, tglRencana);
-  eraseAndWrite(page1, 140, 480, 238, 18, `${noSp2b} /UP3 WATAMPONE/PDKB-TM/${bulan}/${tahun}`);
-  eraseAndWrite(page1, 450, 480, 100, 18, tglRencana);
-  eraseAndWrite(page1, 160, 560, 390, 15, data.jenisPekerjaan || data.instruksiKerja || "-");
-  eraseAndWrite(page1, 160, 580, 390, 15, `${noWo}/WO/UP3 WATAMPONE.PREP/${bulan}/${tahun}`);
-  eraseAndWrite(page1, 160, 600, 390, 15, data.alamat || "-");
-  eraseAndWrite(page1, 160, 620, 390, 15, data.inputNoTiang || "-");
-  eraseAndWrite(page1, 160, 640, 390, 15, data.penyulang || "-");
-  eraseAndWrite(page1, 160, 660, 390, 15, data.garduInduk || "-");
-  eraseAndWrite(page1, 160, 680, 390, 15, data.ulp || "WATAMPONE");
-  if (pdfDoc.getPageCount() > 1) {
-    const page2 = pdfDoc.getPage(1);
-    eraseAndWrite(page2, 335, 28, 230, 18, `NO. ${noSp2b} /UP3 WATAMPONE/PDKB-TM/${bulan}/${tahun}`, true, 7.5);
-    eraseAndWrite(page2, 335, 46, 230, 18, `TANGGAL : ${tglRencana}`, true, 7.5);
-    eraseAndWrite(page2, 160, 83, 400, 12, data.instruksiKerja || "-");
-    eraseAndWrite(page2, 160, 95, 400, 12, `${noWo}/WO/UP3 WATAMPONE.PREP/${bulan}/${tahun}`);
-    eraseAndWrite(page2, 160, 107, 400, 12, data.alamat || "-");
-    eraseAndWrite(page2, 160, 131, 400, 12, `ULP ${data.ulp || "WATAMPONE"}`);
-    eraseAndWrite(page2, 160, 143, 400, 12, `${data.inputNoTiang || "-"}/ ${data.penyulang || "-"}`);
-    eraseAndWrite(page2, 160, 155, 400, 12, `GI 20KV ${data.garduInduk || "-"}`);
-    const p2ColX = 265;
-    const p2ColW = 295;
-    eraseAndWrite(page2, p2ColX, 182, p2ColW, 11.7, data.kondisiTanah || "Kering");
-    eraseAndWrite(page2, p2ColX, 196, p2ColW, 11.7, data.jarakJalanRaya || "5 Meter");
-    eraseAndWrite(page2, p2ColX, 210, p2ColW, 11.7, `${data.personilReady || 8} Orang / Regu`);
-    eraseAndWrite(page2, p2ColX, 224, p2ColW, 11.7, `${data.durasiPekerjaan || 3} Jam`);
-    eraseAndWrite(page2, p2ColX, 238, p2ColW, 11.7, data.tingkatKesulitan || "SEDANG");
-    eraseAndWrite(page2, p2ColX, 252, p2ColW, 11.7, data.opsiBangunan || "Tidak Ada");
-    eraseAndWrite(page2, p2ColX, 266, p2ColW, 11.7, data.opsiPohon || "Ada (Perlu Blanket / Isolasi)");
-    eraseAndWrite(page2, p2ColX, 280, p2ColW, 11.7, `${data.jenisTiang || "BETON"} ${data.ukuranTiang || "12"} Meter`);
-    eraseAndWrite(page2, p2ColX, 294, p2ColW, 11.7, `${data.jenisKonduktor || "AAAC-S"} ${data.ukuranKonduktor || "150"} sqmm`);
-    eraseAndWrite(page2, p2ColX, 308, p2ColW, 11.7, data.opsiSiap || "MAMPU");
-    eraseAndWrite(page2, 110, 360, 200, 11, data.preparator || "AKMAL FADIL", true, 7.5);
-    eraseAndWrite(page2, 110, 375, 200, 11, tglHMinus1, false, 7);
-    eraseAndWrite(page2, 110, 390, 200, 11, tglRencana, false, 7);
-    eraseAndWrite(page2, 280, 420, 80, 12, tglHMinus1, false, 7);
-    eraseAndWrite(page2, 280, 445, 80, 12, tglHMinus1, false, 7);
-    if (data.fotoUrl) {
-      const photo = await getImageBytes(data.fotoUrl);
-      if (photo) {
-        try {
-          const emb = photo.format === "png" ? await pdfDoc.embedPng(photo.bytes) : await pdfDoc.embedJpg(photo.bytes);
-          page2.drawImage(emb, { x: 45, y: H - 470 - 200, width: 235, height: 195 });
-        } catch (e) {
-        }
-      }
-    }
-  }
-  if (pdfDoc.getPageCount() > 2) {
-    const page3 = pdfDoc.getPage(2);
-    eraseAndWrite(page3, 100, 140, 400, 18, `NO. ${noSp2b} /UP3 WATAMPONE/PDKB TM/${bulan}/${tahun}`, true, 8.5);
-    eraseAndWrite(page3, 100, 160, 400, 18, `TANGGAL : ${tglRencana}`, true, 8.5);
-    eraseAndWrite(page3, 260, 260, 300, 15, `${data.inputNoTiang || "-"}/ ${data.penyulang || "-"}`);
-    eraseAndWrite(page3, 260, 280, 300, 15, `GI 20KV ${data.garduInduk || "-"}`);
-    eraseAndWrite(page3, 180, 340, 380, 15, data.instruksiKerja || "-");
-    eraseAndWrite(page3, 380, 500, 180, 15, `WATAMPONE, ${tglRencana}`);
-    eraseAndWrite(page3, 380, 560, 180, 15, data.asman || "BAKHTIAR", true);
-    eraseAndWrite(page3, 380, 575, 180, 15, data.asmanBidang || "ASMAN JARINGAN DAN KONSTRUKSI", false, 7.5);
-  }
-  if (pdfDoc.getPageCount() > 3) {
-    const page4 = pdfDoc.getPage(3);
-    eraseAndWrite(page4, 100, 140, 400, 18, `NO. ${noSp2b} /UP3 WATAMPONE/PDKB TM/${bulan}/${tahun}`, true, 8.5);
-    eraseAndWrite(page4, 100, 160, 400, 18, `TANGGAL : ${tglRencana}`, true, 8.5);
-    const pList = data.personnelList || [];
-    let curRowY = 208;
-    for (let i = 0; i < 10; i++) {
-      const p = pList[i] || {
-        nama: `Personil PDKB ${i + 1}`,
-        nip: `1990010${i + 1}`,
-        noSerkomLv2: `SERKOM-LV2-${i + 1}`,
-        noSerkomLv3: `SERKOM-LV3-${i + 1}`,
-        tugas: i === 0 ? "PENGAWAS PEKERJAAN" : i === 1 ? "PENGAWAS K3" : "LINEMAN"
-      };
-      let cert = p.noSerkomLv2 || "-";
-      if (p.tugas === "PENGAWAS PEKERJAAN" || p.tugas === "PENGAWAS K3") {
-        cert = p.noSerkomLv3 || p.noSerkomLv2 || "-";
-      }
-      const profText = `${p.nama}-${p.nip}
-(No Sertifikat : ${cert})`;
-      eraseAndWrite(page4, 72, curRowY, 175, 20, profText, false, 6.5);
-      eraseAndWrite(page4, 252, curRowY, 142, 20, p.tugas || "LINEMAN", true, 7);
-      curRowY += 26;
-    }
-  }
-  if (pdfDoc.getPageCount() > 4) {
-    const page5 = pdfDoc.getPage(4);
-    eraseAndWrite(page5, 100, 140, 400, 18, `NO. ${noSp2b} /UP3 WATAMPONE/PDKB TM/${bulan}/${tahun}`, true, 8.5);
-    eraseAndWrite(page5, 100, 160, 400, 18, `TANGGAL : ${tglRencana}`, true, 8.5);
-    eraseAndWrite(page5, 250, 200, 300, 14, data.asman || "BAKHTIAR", true);
-    eraseAndWrite(page5, 250, 245, 300, 14, data.namaPP || "PENGAWAS PEKERJAAN");
-    eraseAndWrite(page5, 250, 260, 300, 14, data.noLv3PP || "12345678-L3");
-    eraseAndWrite(page5, 250, 280, 300, 14, data.namaPK3 || "PENGAWAS K3");
-    eraseAndWrite(page5, 250, 295, 300, 14, data.noLv3PK3 || "87654321-L3");
-    eraseAndWrite(page5, 250, 345, 300, 14, data.instruksiKerja || "-");
-    eraseAndWrite(page5, 50, 580, 200, 16, data.asman || "BAKHTIAR", true);
-    eraseAndWrite(page5, 350, 540, 200, 14, `WATAMPONE, ${tglRencana}`);
-    eraseAndWrite(page5, 350, 580, 200, 16, data.asman || "BAKHTIAR", true);
-    eraseAndWrite(page5, 350, 650, 200, 16, data.namaPP || "PENGAWAS PEKERJAAN", true);
-    eraseAndWrite(page5, 350, 720, 200, 16, data.namaPK3 || "PENGAWAS K3", true);
-  }
-  if (pdfDoc.getPageCount() > 5) {
-    const page6 = pdfDoc.getPage(5);
-    eraseAndWrite(page6, 205, 124, 340, 12, data.namaPP || "PENGAWAS PEKERJAAN");
-    eraseAndWrite(page6, 205, 139, 340, 12, data.namaPK3 || "PENGAWAS K3");
-    eraseAndWrite(page6, 205, 154, 340, 12, data.instruksiKerja || "-");
-    eraseAndWrite(page6, 205, 180, 340, 12, data.penyulang || "-");
-    eraseAndWrite(page6, 200, 600, 340, 14, data.opsiBangunan || "Tidak Ada");
-    eraseAndWrite(page6, 200, 620, 340, 14, data.opsiPohon || "Ada (Perlu Blanket / Isolasi)");
-    eraseAndWrite(page6, 200, 640, 340, 14, data.opsiJalan || "Perlu Rambu K3 & Traffic Cone");
-  }
-  return await pdfDoc.save();
-}
 
 // server/supabaseBackend.ts
 var gasDocumentAppSupported = null;
@@ -5347,40 +5937,38 @@ async function handleSupabaseWrite(action, payload) {
           let pdfBytes;
           const rawRep = payload?.rawReplacements || payload?.replacements || {};
           if (docType === "WORK_ORDER" || fileName.includes("WORK_ORDER") || fileName.includes("WO") || templateDocId === GOOGLE_DOC_TEMPLATES.WORK_ORDER) {
-            pdfBytes = await generateFilledWorkOrderGoogleDocPdf({
+            const doc = await generateExactWorkOrderPdf({
+              noWo: rawRep["inputNoWo"] || rawRep["INPUT NO. WO"] || "001",
               inputNoWo: rawRep["inputNoWo"] || rawRep["INPUT NO. WO"] || "001",
-              bulan: rawRep["bulan"] || rawRep["BULAN"] || "IX",
-              tahun: rawRep["tahun"] || rawRep["TAHUN"] || (/* @__PURE__ */ new Date()).getFullYear().toString(),
-              tanggalSurvey: rawRep["tanggalSurvey"] || rawRep["TANGGAL_SURVEY"] || rawRep["TANGGAL SURVEY"] || "-",
-              ulp: rawRep["ulp"] || "WATAMPONE",
-              instruksiKerja: rawRep["instruksiKerja"] || rawRep["instruksi_kerja"] || "-",
-              alamat: rawRep["alamat"] || "-",
               inputNoTiang: rawRep["inputNoTiang"] || rawRep["INPUT NO. TIANG"] || "-",
+              instruksiKerja: rawRep["instruksiKerja"] || rawRep["instruksi_kerja"] || "-",
+              ulp: rawRep["ulp"] || "WATAMPONE",
+              alamat: rawRep["alamat"] || "-",
               garduInduk: rawRep["garduInduk"] || rawRep["gardu_induk"] || "-",
               penyulang: rawRep["penyulang"] || "-",
               jenisTiang: rawRep["jenisTiang"] || rawRep["jenis_tiang"] || "BETON",
               ukuranTiang: rawRep["ukuranTiang"] || rawRep["ukuran_tiang"] || "12",
               jenisKonduktor: rawRep["jenisKonduktor"] || rawRep["jenis_konduktor"] || "AAAC-S",
               ukuranKonduktor: rawRep["ukuranKonduktor"] || rawRep["ukuran_konduktor"] || "150",
+              tanggalSurvey: rawRep["tanggalSurvey"] || rawRep["TANGGAL_SURVEY"] || rawRep["TANGGAL SURVEY"] || "-",
               preparator: rawRep["preparator"] || rawRep["user_name.user_role=PREPARATOR"] || "AKMAL FADIL",
               asman: rawRep["asman"] || rawRep["user_name.user_role=ASMAN"] || "BAKHTIAR",
-              fotoUrl: payload?.imageReplacements?.["foto_temuan"] || rawRep["fotoUrl"] || "",
-              mapUrl: payload?.imageReplacements?.["CAPTURE MAP"] || rawRep["mapUrl"] || "",
-              koordinat: rawRep["koordinat"] || ""
-            }, templateDocId);
+              koordinat: rawRep["koordinat"] || "",
+              fotoTemuan: payload?.imageReplacements?.["foto_temuan"] || rawRep["fotoUrl"] || "",
+              mapUrl: payload?.imageReplacements?.["CAPTURE MAP"] || rawRep["mapUrl"] || ""
+            });
+            pdfBytes = new Uint8Array(doc.output("arraybuffer"));
           } else {
-            pdfBytes = await generateFilledSp2bSp3bGoogleDocPdf({
+            const doc = await generateExactSp2bSp3bPdf({
               inputNoSp2b: rawRep["inputNoSp2b"] || rawRep["INPUT NO. SP2B"] || "001",
               inputNoWo: rawRep["inputNoWo"] || rawRep["INPUT NO. WO"] || "001",
-              bulan: rawRep["bulan"] || rawRep["BULAN"] || "IX",
-              tahun: rawRep["tahun"] || rawRep["TAHUN"] || (/* @__PURE__ */ new Date()).getFullYear().toString(),
+              inputNoTiang: rawRep["inputNoTiang"] || rawRep["INPUT NO. TIANG"] || "-",
+              instruksiKerja: rawRep["instruksiKerja"] || rawRep["instruksi_kerja"] || "-",
+              jenisPekerjaan: rawRep["jenisPekerjaan"] || rawRep["jenis_pekerjaan"] || rawRep["instruksiKerja"] || "-",
               tanggalDirencanakan: rawRep["tanggalDirencanakan"] || rawRep["tanggal_direncanakan"] || "-",
               tanggalHMinus1: rawRep["tanggalHMinus1"] || rawRep["h-1.tanggal_direncanakan"] || "-",
-              instruksiKerja: rawRep["instruksiKerja"] || rawRep["instruksi_kerja"] || "-",
-              jenisPekerjaan: rawRep["jenisPekerjaan"] || rawRep["jenis_pekerjaan"] || "-",
               ulp: rawRep["ulp"] || "WATAMPONE",
               alamat: rawRep["alamat"] || "-",
-              inputNoTiang: rawRep["inputNoTiang"] || rawRep["INPUT NO. TIANG"] || "-",
               garduInduk: rawRep["garduInduk"] || rawRep["gardu_induk"] || "-",
               penyulang: rawRep["penyulang"] || "-",
               jenisTiang: rawRep["jenisTiang"] || rawRep["jenis_tiang"] || "BETON",
@@ -5390,14 +5978,14 @@ async function handleSupabaseWrite(action, payload) {
               kondisiTanah: rawRep["kondisiTanah"] || rawRep["area.KONDISI TANAH"] || "Kering",
               jarakJalanRaya: rawRep["jarakJalanRaya"] || rawRep["area. JARAK LOKASI-JALAN RAYA"] || "5 Meter",
               personilReady: Number(rawRep["personilReady"] || rawRep["PERSONIL READY"] || 8),
-              durasiPekerjaan: rawRep["durasiPekerjaan"] || rawRep["DURASI PEKERJAAN"] || "3 Jam",
+              durasiPekerjaan: rawRep["durasiPekerjaan"] || rawRep["DURASI PEKERJAAN"] || "3",
               tingkatKesulitan: rawRep["tingkatKesulitan"] || rawRep["TINGKAT KESULITAN"] || "SEDANG",
               opsiBangunan: rawRep["opsiBangunan"] || rawRep["OPSI BANGUNAN"] || "Tidak Ada",
-              opsiPohon: rawRep["opsiPohon"] || rawRep["OPSI POHON"] || "Ada",
+              opsiPohon: rawRep["opsiPohon"] || rawRep["OPSI POHON"] || "Ada (Perlu Blanket / Isolasi)",
               opsiSiap: rawRep["opsiSiap"] || rawRep["OPSI SIAP"] || "MAMPU",
-              opsiJalan: rawRep["opsiJalan"] || rawRep["OPSI JALAN"] || "Aman",
-              preparator: rawRep["preparator"] || rawRep["user_name.user_role=PREPARATOR"] || "AKMAL FADIL",
-              asman: rawRep["asman"] || rawRep["user_name.user_role=ASMAN"] || "BAKHTIAR",
+              opsiJalan: rawRep["opsiJalan"] || rawRep["OPSI JALAN"] || "Perlu Rambu K3 & Traffic Cone",
+              preparatorName: rawRep["preparator"] || rawRep["user_name.user_role=PREPARATOR"] || "AKMAL FADIL",
+              asmanName: rawRep["asman"] || rawRep["user_name.user_role=ASMAN"] || "BAKHTIAR",
               asmanBidang: rawRep["asmanBidang"] || rawRep["user_bidang.user_role=ASMAN"] || "ASMAN JARINGAN DAN KONSTRUKSI",
               namaPP: rawRep["namaPP"] || rawRep["nama_pp"] || "PENGAWAS PEKERJAAN",
               noLv3PP: rawRep["noLv3PP"] || rawRep["no_lv3_pp"] || "-",
@@ -5405,8 +5993,10 @@ async function handleSupabaseWrite(action, payload) {
               noLv3PK3: rawRep["noLv3PK3"] || rawRep["no_lv3_pk3"] || "-",
               personnelList: payload?.personnelList || [],
               fotoUrl: payload?.imageReplacements?.["foto_temuan"] || rawRep["fotoUrl"] || "",
-              koordinat: rawRep["koordinat"] || ""
-            }, templateDocId);
+              koordinat: rawRep["koordinat"] || "",
+              docType: docType || "BUNDLE"
+            });
+            pdfBytes = new Uint8Array(doc.output("arraybuffer"));
           }
           const pdfBase64 = Buffer.from(pdfBytes).toString("base64");
           try {
