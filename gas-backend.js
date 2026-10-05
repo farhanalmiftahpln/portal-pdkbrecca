@@ -1623,6 +1623,38 @@ function handleSubmitReviewForm(payload) {
     return -1;
   }
 
+  // Helper untuk memastikan NO. WO tersimpan ke dalam kolom NO. WO pada suatu sheet tanpa duplikasi
+  function ensureNoWoInSheet(sheet, targetNoWo) {
+    if (!sheet || !targetNoWo) return;
+    try {
+      const data = sheet.getDataRange().getValues();
+      let noWoColIdx = 0;
+      if (data.length > 0) {
+        const headers = data[0].map(h => h ? h.toString().toUpperCase().trim() : "");
+        const idx = headers.indexOf("NO. WO");
+        if (idx > -1) noWoColIdx = idx;
+      }
+      const targetStr = String(targetNoWo).trim().toLowerCase();
+      let exists = false;
+      let targetRow = data.length + 1;
+      for (let i = 1; i < data.length; i++) {
+        const val = String(data[i][noWoColIdx]).trim().toLowerCase();
+        if (val === targetStr) {
+          exists = true;
+          break;
+        }
+        if (!val && targetRow === data.length + 1) {
+          targetRow = i + 1;
+        }
+      }
+      if (!exists) {
+        sheet.getRange(targetRow, noWoColIdx + 1).setValue(targetNoWo);
+      }
+    } catch (err) {
+      console.warn("ensureNoWoInSheet warning:", err);
+    }
+  }
+
   // 1.5. Clean up existing rows HANYA untuk sheet list berulang (MATERIAL dan HAZARD)
   // Sheet KON_SEKITAR, KON_KONSTRUKSI, dan PEKERJAAN TIDAK DIHAPUS agar rumus/formula di kolom NO. WO tetap utuh
   deleteRowsByNoWo(reviewWoSS.getSheetByName("MATERIAL"), noWo);
@@ -1871,67 +1903,55 @@ function handleSubmitReviewForm(payload) {
     }
   }
 
-  // 10. Update TRACKING sheet and WORK PLAN sheet if approval is "Layak"
-  if (approval && String(approval.status).trim().toLowerCase() === "layak") {
-    try {
-      const wpSS = SpreadsheetApp.openById(SPREADSHEETS.WORK_PLAN);
-      
-      // Update TRACKING sheet
-      const sheetTracking = wpSS.getSheetByName("TRACKING");
-      if (sheetTracking) {
-        let trackingData = sheetTracking.getDataRange().getValues();
-        let trackingHeaders = trackingData[0].map(h => h ? h.toString().toUpperCase().trim() : "");
-        let trackingNoWoIdx = trackingHeaders.indexOf("NO. WO");
-        
-        if (trackingNoWoIdx > -1) {
-          let woExists = false;
-          let targetRow = trackingData.length + 1;
-          for (let i = 1; i < trackingData.length; i++) {
-            let cellVal = String(trackingData[i][trackingNoWoIdx]).trim();
-            if (cellVal === String(noWo).trim()) {
-              woExists = true;
-              break;
-            }
-            if (!cellVal && targetRow === trackingData.length + 1) {
-              targetRow = i + 1;
-            }
-          }
-          if (!woExists) {
-            sheetTracking.getRange(targetRow, trackingNoWoIdx + 1).setValue(noWo);
-          }
-        }
-      }
-
-      // Update WORK PLAN sheet
-      const sheetWorkPlan = wpSS.getSheetByName("WORK PLAN");
-      if (sheetWorkPlan) {
-        let wpData = sheetWorkPlan.getDataRange().getValues();
-        let wpHeaders = wpData[0] ? wpData[0].map(h => h ? h.toString().toUpperCase().trim() : "") : [];
-        let wpNoWoIdx = wpHeaders.indexOf("NO. WO");
-        
-        // If NO. WO column doesn't exist, assume it's column A (index 0) and we might need to set it, 
-        // but normally it exists. Let's assume it exists. If not found, use column 1.
-        if (wpNoWoIdx === -1) wpNoWoIdx = 0;
-        
-        let woExistsWP = false;
-        let targetRowWP = wpData.length + 1;
-        for (let i = 1; i < wpData.length; i++) {
-          let cellVal = String(wpData[i][wpNoWoIdx]).trim();
-          if (cellVal === String(noWo).trim()) {
-            woExistsWP = true;
-            break;
-          }
-          if (!cellVal && targetRowWP === wpData.length + 1) {
-            targetRowWP = i + 1;
-          }
-        }
-        if (!woExistsWP) {
-          sheetWorkPlan.getRange(targetRowWP, wpNoWoIdx + 1).setValue(noWo);
-        }
-      }
-    } catch (e) {
-      console.error("Error updating TRACKING or WORK PLAN sheet:", e);
+  // 10. Update TRACKING sheet dan WORK PLAN sheet pada spreadsheet WORK_PLAN (setiap submit review WO)
+  try {
+    const wpSS = SpreadsheetApp.openById(SPREADSHEETS.WORK_PLAN);
+    
+    // Pastikan NO. WO tersimpan di sheet TRACKING
+    const sheetTracking = wpSS.getSheetByName("TRACKING");
+    if (sheetTracking) {
+      ensureNoWoInSheet(sheetTracking, noWo);
     }
+
+    // Pastikan NO. WO tersimpan di sheet WORK PLAN
+    const sheetWorkPlan = wpSS.getSheetByName("WORK PLAN");
+    if (sheetWorkPlan) {
+      ensureNoWoInSheet(sheetWorkPlan, noWo);
+    }
+  } catch (e) {
+    console.error("Error updating TRACKING or WORK PLAN sheet in WORK_PLAN spreadsheet:", e);
+  }
+
+  // 11. Pastikan NO. WO tersimpan ke sheet PEKERJAAN, MATERIAL, KON_SEKITAR, KON_KONSTRUKSI, dan HAZARD
+  try {
+    const targetSheets = [
+      reviewWoSS.getSheetByName("PEKERJAAN") || reviewWoSS.getSheetByName("PEKERJAN"),
+      reviewWoSS.getSheetByName("MATERIAL"),
+      reviewWoSS.getSheetByName("KON_SEKITAR"),
+      reviewWoSS.getSheetByName("KON_KONSTRUKSI"),
+      reviewWoSS.getSheetByName("HAZARD")
+    ];
+    targetSheets.forEach(function(s) {
+      if (s) ensureNoWoInSheet(s, noWo);
+    });
+
+    // Cek juga jika ada spreadsheet TRACKING_EVIDENCES terpisah yang merupakan Google Spreadsheet
+    if (SPREADSHEETS.TRACKING_EVIDENCES && SPREADSHEETS.TRACKING_EVIDENCES !== SPREADSHEETS.REVIEW_WO) {
+      try {
+        const teSS = SpreadsheetApp.openById(SPREADSHEETS.TRACKING_EVIDENCES);
+        if (teSS) {
+          const teSheetNames = ["PEKERJAAN", "PEKERJAN", "MATERIAL", "KON_SEKITAR", "KON_KONSTRUKSI", "HAZARD"];
+          teSheetNames.forEach(function(name) {
+            const ts = teSS.getSheetByName(name);
+            if (ts) ensureNoWoInSheet(ts, noWo);
+          });
+        }
+      } catch (errTe) {
+        // Abaikan jika TRACKING_EVIDENCES adalah folder Google Drive
+      }
+    }
+  } catch (errEnsure) {
+    console.error("Error ensuring NO. WO in evidence sheets:", errEnsure);
   }
 
   return {
