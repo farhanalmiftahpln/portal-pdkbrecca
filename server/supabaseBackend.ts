@@ -711,11 +711,16 @@ function parseDateHelper(val: any): string | null {
 
   if (str.includes('T')) {
     const d = new Date(str);
-    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    if (!isNaN(d.getTime())) {
+      // Selalu gunakan zona waktu WITA (Asia/Makassar, UTC+8) untuk konversi tanggal PLN UID Sulselrabar
+      return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Makassar' }).format(d);
+    }
   }
 
   const d = new Date(str);
-  if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+  if (!isNaN(d.getTime())) {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Makassar' }).format(d);
+  }
   return null;
 }
 
@@ -726,7 +731,10 @@ function parseDateTimeHelper(val: any): string | null {
 
   if (str.includes('T')) {
     const d = new Date(str);
-    if (!isNaN(d.getTime())) return d.toISOString();
+    if (!isNaN(d.getTime())) {
+      const dateWita = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Makassar' }).format(d);
+      return `${dateWita}T00:00:00`;
+    }
   }
 
   if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(str)) {
@@ -739,8 +747,18 @@ function parseDateTimeHelper(val: any): string | null {
     return `${y}-${m}-${d}T${timeStr}`;
   }
 
+  if (/^\d{4}-\d{1,2}-\d{1,2}/.test(str)) {
+    const [datePart, timePart] = str.split(' ');
+    const [y, m, d] = datePart.split('-');
+    const timeStr = timePart ? (timePart.length === 5 ? `${timePart}:00` : timePart) : '00:00:00';
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}T${timeStr}`;
+  }
+
   const d = new Date(str);
-  if (!isNaN(d.getTime())) return d.toISOString();
+  if (!isNaN(d.getTime())) {
+    const dateWita = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Makassar' }).format(d);
+    return `${dateWita}T00:00:00`;
+  }
   return null;
 }
 

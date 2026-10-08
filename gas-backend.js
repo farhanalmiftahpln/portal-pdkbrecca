@@ -2010,11 +2010,23 @@ function handleGetReviewedWOs() {
     .map((row, idx) => {
       const noWo = row[cNoWo];
       const wd = woData.find((w) => w[0] === noWo);
+      let tglRen = row[cTgl];
+      if (tglRen instanceof Date) {
+        try {
+          tglRen = Utilities.formatDate(tglRen, "Asia/Makassar", "yyyy-MM-dd");
+        } catch(e) {
+          const w = new Date(tglRen.getTime() + 8 * 3600 * 1000);
+          const y = w.getUTCFullYear();
+          const m = String(w.getUTCMonth() + 1).padStart(2, "0");
+          const d = String(w.getUTCDate()).padStart(2, "0");
+          tglRen = `${y}-${m}-${d}`;
+        }
+      }
       return {
         noWo: noWo,
         approvalPreparator: row[cApprPrep],
         ketPreparator: row[cKetPrep],
-        tanggalRencanakan: row[cTgl],
+        tanggalRencanakan: tglRen,
         ulp: wd && colUlp !== -1 ? wd[colUlp] : "",
         gi: wd && colGi !== -1 ? wd[colGi] : "",
         penyulang: wd && colPenyulang !== -1 ? wd[colPenyulang] : "",
@@ -2051,7 +2063,15 @@ function handleGetReviewDetail(payload) {
     return data
       .map((r) => {
         let obj = {};
-        headers.forEach((h, i) => (obj[h] = r[i]));
+        headers.forEach((h, i) => {
+          let v = r[i];
+          if (v instanceof Date) {
+            try {
+              v = Utilities.formatDate(v, "Asia/Makassar", "yyyy-MM-dd");
+            } catch(e) {}
+          }
+          obj[h] = v;
+        });
         return obj;
       })
       .filter((r) => String(r["NO. WO"]).trim() === String(noWo).trim());
@@ -2077,7 +2097,15 @@ function handleGetReviewDetail(payload) {
       );
       if (matchedRow) {
         woHeaders.forEach((h, i) => {
-          if (h) workOrder[h] = matchedRow[i];
+          if (h) {
+            let v = matchedRow[i];
+            if (v instanceof Date) {
+              try {
+                v = Utilities.formatDate(v, "Asia/Makassar", "yyyy-MM-dd");
+              } catch(e) {}
+            }
+            workOrder[h] = v;
+          }
         });
       }
     }
@@ -2209,11 +2237,15 @@ function handleGetWorkPlans() {
         const key = h?.toString().trim();
         let val = row[i];
         if (val instanceof Date) {
-          const w = new Date(val.getTime() + 8 * 3600 * 1000);
-          const y = w.getUTCFullYear();
-          const m = String(w.getUTCMonth() + 1).padStart(2, "0");
-          const d = String(w.getUTCDate()).padStart(2, "0");
-          val = `${y}-${m}-${d}`;
+          try {
+            val = Utilities.formatDate(val, "Asia/Makassar", "yyyy-MM-dd");
+          } catch(e) {
+            const w = new Date(val.getTime() + 8 * 3600 * 1000);
+            const y = w.getUTCFullYear();
+            const m = String(w.getUTCMonth() + 1).padStart(2, "0");
+            const d = String(w.getUTCDate()).padStart(2, "0");
+            val = `${y}-${m}-${d}`;
+          }
         }
         obj[key] = val;
       });

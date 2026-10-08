@@ -8,23 +8,44 @@ export function cn(...inputs: ClassValue[]) {
 export function formatDate(dateInput: any): string {
   if (!dateInput) return '-';
   
-  // If it's already in DD/MM/YYYY or DD-MM-YYYY format
+  // If it's already in DD/MM/YYYY or DD-MM-YYYY or YYYY-MM-DD format
   if (typeof dateInput === 'string') {
-    const partsM1 = dateInput.split('/');
-    if (partsM1.length === 3 && partsM1[2].length === 4) return dateInput;
+    const trimmed = dateInput.trim();
+    if (!trimmed || trimmed === '-' || trimmed.toLowerCase() === 'null') return '-';
+
+    const partsSlash = trimmed.split('/');
+    if (partsSlash.length === 3) {
+      if (partsSlash[2].length === 4) return trimmed; // already DD/MM/YYYY
+      if (partsSlash[0].length === 4) return `${partsSlash[2].padStart(2, '0')}/${partsSlash[1].padStart(2, '0')}/${partsSlash[0]}`; // YYYY/MM/DD
+    }
     
-    const partsM2 = dateInput.split('-');
-    if (partsM2.length === 3 && partsM2[2].length === 4) return `${partsM2[0]}/${partsM2[1]}/${partsM2[2]}`;
+    // Check YYYY-MM-DD (e.g. from Supabase or standard date string)
+    const dateOnly = trimmed.includes('T') ? trimmed.split('T')[0] : (trimmed.includes(' ') ? trimmed.split(' ')[0] : trimmed);
+    const partsDash = dateOnly.split('-');
+    if (partsDash.length === 3) {
+      if (partsDash[0].length === 4) {
+        // YYYY-MM-DD -> DD/MM/YYYY (Direct string extraction, NO timezone offset bug)
+        return `${partsDash[2].padStart(2, '0')}/${partsDash[1].padStart(2, '0')}/${partsDash[0]}`;
+      }
+      if (partsDash[2].length === 4) {
+        // DD-MM-YYYY -> DD/MM/YYYY
+        return `${partsDash[0].padStart(2, '0')}/${partsDash[1].padStart(2, '0')}/${partsDash[2]}`;
+      }
+    }
   }
 
   const d = new Date(dateInput);
   if (isNaN(d.getTime())) return typeof dateInput === 'string' ? dateInput : '-'; // fallback
 
-  const day = String(d.getDate()).padStart(2, '0');
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const year = d.getFullYear();
-
-  return `${day}/${month}/${year}`;
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Makassar' }).format(d).split('-');
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  } catch (e) {
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
 }
 
 export function formatDateTime(dateInput: any): string {
