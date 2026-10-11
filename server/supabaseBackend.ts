@@ -3632,9 +3632,9 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
           keypoint: payload.keypoint || '',
           keterangan: payload.keterangan || '',
           foto: fotoData || null,
-          approval_asman: payload.approvalAsman || 'Menunggu',
-          approval_tl: payload.approvalTl || 'Menunggu',
-          approval_preparator: payload.approvalPreparator || 'Menunggu',
+          approval_asman: payload.approvalAsman || null,
+          approval_tl: payload.approvalTl || null,
+          approval_preparator: payload.approvalPreparator || null,
           kategori: payload.kategori || 'PEMELIHARAAN'
         };
 
