@@ -818,6 +818,26 @@ export async function syncWorkOrdersFromSheets(): Promise<any> {
           usedIds.add(idStr);
         }
 
+        const rawFoto = w.foto || rev.foto || '';
+        const cleanFoto = (typeof rawFoto === 'string' && (rawFoto.startsWith('http://') || rawFoto.startsWith('https://') || rawFoto.startsWith('data:'))) ? rawFoto : null;
+
+        let rawStatus = String(w.status || rev.statusWo || '').trim();
+        if (rawStatus.startsWith('#') || rawStatus.toLowerCase() === 'null') {
+          rawStatus = '';
+        }
+
+        let rawAppPrep = rev.approvalPreparator || w.approvalPreparator || w.approval_preparator || null;
+        if (rawAppPrep && (rawAppPrep.includes('/WO/') || rawAppPrep.includes('/PREP/'))) {
+          rawAppPrep = null;
+        }
+
+        let rawKetPrep = rev.ketPreparator || w.ketPreparator || w.ket_preparator || null;
+        if (rawKetPrep && /^\d{4}-\d{2}-\d{2}/.test(rawKetPrep)) {
+          rawKetPrep = null;
+        }
+
+        const kategoriVal = w.kategori || rev.kategori || '';
+
         return {
           id: idStr,
           no_wo: noWoStr,
@@ -828,7 +848,8 @@ export async function syncWorkOrdersFromSheets(): Promise<any> {
           penyulang: w.penyulang || rev.penyulang || null,
           segmen: w.segmen || rev.segmen || null,
           temuan: w.temuan || rev.temuan || null,
-          status: w.status || rev.statusWo || 'Menunggu Approval',
+          kategori: kategoriVal,
+          status: rawStatus,
           alamat: w.alamat || rev.alamat || null,
           koordinat: w.koordinat || w.titikKoordinat || w.titik_koordinat || null,
           skala_prioritas: w.skalaPrioritas || w.skala_prioritas || null,
@@ -838,13 +859,13 @@ export async function syncWorkOrdersFromSheets(): Promise<any> {
           ukuran_konduktor: w.ukuranKonduktor || w.ukuran_konduktor || null,
           keypoint: w.keypoint || null,
           keterangan: w.keterangan || null,
-          foto: w.foto || rev.foto || null,
+          foto: cleanFoto,
           approval_asman: w.approvalAsman || w.approval_asman || null,
           ket_asman: w.ketAsman || w.ket_asman || null,
           approval_tl: w.approvalTl || w.approval_tl || null,
           ket_tl: w.ketTl || w.ket_tl || null,
-          approval_preparator: rev.approvalPreparator || w.approvalPreparator || w.approval_preparator || null,
-          ket_preparator: rev.ketPreparator || w.ketPreparator || w.ket_preparator || null,
+          approval_preparator: rawAppPrep,
+          ket_preparator: rawKetPrep,
           tanggal_rencanakan: parseDateTimeHelper(rev.tanggalRencanakan || w.tanggalRencanakan || w.tanggal_rencanakan)
         };
       });
@@ -2093,8 +2114,12 @@ async function computeDashboardStats(filters: any = {}): Promise<any> {
     return null;
   }
 
-  // Filter realisasi strictly based on active filters (month, year, ULP, GI, penyulang)
+  // Filter realisasi strictly based on active filters (month, year, ULP, GI, penyulang) AND konfirmasi === 'APPROVE'
   const filteredRealisasi = realisasi.filter((r: any) => {
+    // Only count approved realisasi (KONFIRMASI === 'APPROVE')
+    const konfirmasi = String(r.konfirmasi || r.KONFIRMASI || '').trim().toUpperCase();
+    if (konfirmasi !== 'APPROVE') return false;
+
     const dt = parseRecordDate(r);
 
     if (filters?.tanggal) {
@@ -2316,7 +2341,7 @@ export async function handleSupabaseRead(action: string, payload: any): Promise<
         segmen: w.segmen || '',
         temuan: w.temuan || '',
         kategori: w.kategori || 'PEMELIHARAAN',
-        status: w.status || 'Menunggu Approval',
+        status: (!w.status || String(w.status).startsWith('#') || String(w.status).toLowerCase() === 'null') ? 'Menunggu Approval' : w.status,
         alamat: w.alamat || '',
         koordinat: w.koordinat || '',
         skalaPrioritas: w.skala_prioritas || '',
@@ -2330,8 +2355,8 @@ export async function handleSupabaseRead(action: string, payload: any): Promise<
         ukuran_konduktor: w.ukuran_konduktor || '',
         keypoint: w.keypoint || '',
         keterangan: w.keterangan || '',
-        foto: w.foto || '',
-        foto_temuan: w.foto || w.foto_temuan || '',
+        foto: (typeof w.foto === 'string' && (w.foto.startsWith('http') || w.foto.startsWith('data:'))) ? w.foto : '',
+        foto_temuan: (typeof w.foto === 'string' && (w.foto.startsWith('http') || w.foto.startsWith('data:'))) ? w.foto : '',
         instruksi_kerja: w.instruksi_kerja || '',
         instruksiKerja: w.instruksi_kerja || '',
         approvalAsman: w.approval_asman || '',
@@ -3621,7 +3646,7 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
           penyulang: payload.penyulang || '',
           segmen: payload.segmen || '',
           temuan: payload.temuan || '',
-          status: payload.status || 'Menunggu Approval',
+          status: payload.status || '',
           alamat: payload.alamat || '',
           koordinat: payload.koordinat || '',
           skala_prioritas: payload.skalaPrioritas || '',
@@ -3632,10 +3657,14 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
           keypoint: payload.keypoint || '',
           keterangan: payload.keterangan || '',
           foto: fotoData || null,
-          approval_asman: payload.approvalAsman || null,
-          approval_tl: payload.approvalTl || null,
-          approval_preparator: payload.approvalPreparator || null,
-          kategori: payload.kategori || 'PEMELIHARAAN'
+          approval_asman: null,
+          ket_asman: null,
+          approval_tl: null,
+          ket_tl: null,
+          approval_preparator: null,
+          ket_preparator: null,
+          tanggal_rencanakan: null,
+          kategori: payload.kategori || ''
         };
 
         let { error: woErr } = await supabaseAdmin.from('work_orders').upsert(woPayload, { onConflict: 'no_wo' });

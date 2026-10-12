@@ -322,6 +322,7 @@ export default function WorkOrder() {
   const uniqueULPs = [...new Set(wos.map(wo => wo.ulp?.toString() || ''))].filter(Boolean).sort();
 
   const getStatusColor = (status: string) => {
+    if (!status) return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
     const s = status.toLowerCase();
     if (s.includes('selesai') || s.includes('disetujui')) return 'bg-green-500/20 text-green-400 border-green-500/30';
     if (s.includes('tunggu') || s.includes('approval')) return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
@@ -463,7 +464,7 @@ export default function WorkOrder() {
                   )}
                   <div className="absolute top-2 right-2">
                     <span className={cn("px-2 py-0.5 rounded border text-[9px] uppercase tracking-widest font-bold shadow-lg backdrop-blur bg-opacity-90", getStatusColor(wo.status))}>
-                      {wo.status}
+                      {wo.status || '-'}
                     </span>
                   </div>
                   <div className="absolute bottom-2 left-2 flex items-center gap-1.5 bg-black/60 px-2 py-1 rounded backdrop-blur">
@@ -832,7 +833,7 @@ export default function WorkOrder() {
                 <div className="absolute bottom-4 left-6 right-6">
                   <div className="flex items-center gap-2 mb-2">
                     <span className={cn("px-2 py-0.5 rounded border text-[10px] uppercase tracking-widest font-bold backdrop-blur", getStatusColor(selectedWo.status))}>
-                      {selectedWo.status}
+                      {selectedWo.status || '-'}
                     </span>
                     <span className="px-2 py-0.5 rounded bg-black/50 text-white text-[10px] uppercase font-mono backdrop-blur cursor-pointer hover:bg-black/70">
                       {selectedWo.noWo || selectedWo.id}
@@ -947,7 +948,7 @@ export default function WorkOrder() {
                   <div>
                     <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-1 font-bold">APPROVAL ASMAN</div>
                     <div className={cn("text-xs font-bold uppercase", selectedWo.approvalAsman?.toString().toLowerCase().includes('disetujui') ? 'text-green-400' : selectedWo.approvalAsman?.toString().toLowerCase().includes('ditolak') ? 'text-red-400' : selectedWo.approvalAsman ? 'text-yellow-400' : 'text-gray-500')}>
-                      {selectedWo.approvalAsman || 'MENUNGGU'}
+                      {selectedWo.approvalAsman || '-'}
                     </div>
                   </div>
                   <div>
@@ -958,7 +959,7 @@ export default function WorkOrder() {
                   <div>
                     <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-1 font-bold">APPROVAL TL PDKB</div>
                     <div className={cn("text-xs font-bold uppercase", selectedWo.approvalTl?.toString().toLowerCase().includes('diterima') ? 'text-green-400' : selectedWo.approvalTl?.toString().toLowerCase().includes('ditolak') ? 'text-red-400' : selectedWo.approvalTl ? 'text-yellow-400' : 'text-gray-500')}>
-                      {selectedWo.approvalTl || 'Menunggu Approval'}
+                      {selectedWo.approvalTl || '-'}
                     </div>
                   </div>
                   <div>
@@ -969,7 +970,7 @@ export default function WorkOrder() {
                   <div>
                     <div className="text-[10px] text-gray-500 uppercase tracking-widest mb-1 font-bold">APPROVAL PREPARATOR</div>
                     <div className={cn("text-xs font-bold uppercase", (selectedWo.approvalPreparator?.toString().toLowerCase().includes('tidak layak') || selectedWo.approvalPreparator?.toString().toLowerCase().includes('ditolak')) ? 'text-red-400' : selectedWo.approvalPreparator?.toString().toLowerCase().includes('layak') ? 'text-green-400' : selectedWo.approvalPreparator ? 'text-yellow-400' : 'text-gray-500')}>
-                      {selectedWo.approvalPreparator || 'Menunggu Approval'}
+                      {selectedWo.approvalPreparator || '-'}
                     </div>
                   </div>
                   <div>
