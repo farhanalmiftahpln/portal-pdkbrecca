@@ -4086,6 +4086,8 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
         mirrorToGoogleSheet('submitReviewForm', payload);
         clearBackendCache('getReviewedWOs');
         clearBackendCache('getWorkPlans');
+        clearBackendCache('getWorkOrders');
+        clearBackendCache('WorkOrder');
 
         return { 
           success: true, 

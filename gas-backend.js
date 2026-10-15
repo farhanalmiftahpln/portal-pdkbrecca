@@ -263,25 +263,52 @@ function formatDateToID(val) {
  * Returns 1-based row index, or -1 jika tidak ditemukan.
  */
 function findRowIndexByNoWo(sheet, targetNoWo) {
-  if (!sheet || !targetNoWo) return -1;
+  if (!sheet || targetNoWo === undefined || targetNoWo === null || targetNoWo === "") return -1;
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return -1;
-  const headers = data[0].map(h => h ? h.toString().toUpperCase().trim() : "");
-  let noWoColIdx = headers.indexOf("NO. WO");
+  const headers = data[0].map(h => h ? String(h).toUpperCase().trim() : "");
+  let noWoColIdx = headers.findIndex(h => {
+    const clean = h.replace(/[\.\s_\-]/g, "");
+    return clean === "NOWO" || clean === "NOMORWO" || clean === "NO" || clean === "IDWO" || clean === "WO";
+  });
   if (noWoColIdx === -1) {
-    noWoColIdx = headers.findIndex(h => {
-      const clean = h.replace(/[\.\s]/g, "");
-      return clean === "NOWO" || clean === "NO";
-    });
+    noWoColIdx = headers.findIndex(h => h.includes("NO") && h.includes("WO"));
   }
   if (noWoColIdx === -1) noWoColIdx = 0; // Default kolom A (1st column)
-  
+
   const target = String(targetNoWo).trim().toLowerCase();
+  const targetNum = parseInt(target.replace(/\D/g, ""), 10);
+
+  // 1. Cek di kolom noWoColIdx terlebih dahulu
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][noWoColIdx]).trim().toLowerCase() === target) {
-      return i + 1; // 1-based index untuk Google Sheets Range
+    const cellVal = data[i][noWoColIdx];
+    if (cellVal !== undefined && cellVal !== null && cellVal !== "") {
+      const cellStr = String(cellVal).trim().toLowerCase();
+      if (cellStr === target) {
+        return i + 1; // 1-based index untuk Google Sheets Range
+      }
+      if (!isNaN(targetNum) && targetNum > 0) {
+        const cellNum = parseInt(cellStr.replace(/\D/g, ""), 10);
+        if (cellNum === targetNum && cellStr.includes(String(targetNum))) {
+          return i + 1;
+        }
+      }
     }
   }
+
+  // 2. Fallback scan seluruh kolom jika baris menggunakan struktur kolom berbeda
+  for (let i = 1; i < data.length; i++) {
+    for (let c = 0; c < data[i].length; c++) {
+      const cellVal = data[i][c];
+      if (cellVal !== undefined && cellVal !== null && cellVal !== "") {
+        const cellStr = String(cellVal).trim().toLowerCase();
+        if (cellStr === target) {
+          return i + 1;
+        }
+      }
+    }
+  }
+
   return -1;
 }
 
@@ -1995,52 +2022,95 @@ function handleSubmitReviewForm(payload) {
   }
 
   // 9. Save Approval Review Details
-  let sheetApprovalReview = reviewWoSS.getSheetByName("APPROVAL REVIEW");
-  if (!sheetApprovalReview) {
-    sheetApprovalReview = reviewWoSS.insertSheet("APPROVAL REVIEW");
-    sheetApprovalReview.appendRow([
-      "NO. WO", "APPROVAL PREPARATOR", "KET PREPARATOR", "APPROVAL SPV", "KET SPV", "PELAKSANA PDKB", "PIC UNIT", "TANGGAL DIRENCANAKAN"
-    ]);
-  }
-  if (sheetApprovalReview && approval) {
-    let data = sheetApprovalReview.getDataRange().getValues();
+  // Pastikan data pada tab APPROVAL disimpan berdasarkan NO. WO terkait di sheet REVIEW_WO / APPROVAL REVIEW
+  function saveApprovalToTargetSheet(sheet) {
+    if (!sheet || !approval) return;
+    let data = sheet.getDataRange().getValues();
     if (data.length === 0) {
-       // Initialize headers if empty
-       sheetApprovalReview.appendRow([
-         "NO. WO", "APPROVAL PREPARATOR", "KET PREPARATOR", "APPROVAL SPV", "KET SPV", "PELAKSANA PDKB", "PIC UNIT", "TANGGAL DIRENCANAKAN"
-       ]);
-       data = sheetApprovalReview.getDataRange().getValues();
+      sheet.appendRow([
+        "NO. WO", "APPROVAL PREPARATOR", "KET PREPARATOR", "TANGGAL DIRENCANAKAN", "PELAKSANA PDKB", "PIC UNIT"
+      ]);
+      data = sheet.getDataRange().getValues();
     }
-    const headers = data[0].map(h => h ? h.toString().toUpperCase().trim() : "");
-    const noWoColIdx = headers.indexOf("NO. WO") > -1 ? headers.indexOf("NO. WO") + 1 : 1;
-    const prefStatusColIdx = headers.indexOf("APPROVAL PREPARATOR") > -1 ? headers.indexOf("APPROVAL PREPARATOR") + 1 : 2;
-    const prefKetColIdx = headers.indexOf("KET PREPARATOR") > -1 ? headers.indexOf("KET PREPARATOR") + 1 : 3;
-    const pelaksanaIdx = headers.indexOf("PELAKSANA PDKB") > -1 ? headers.indexOf("PELAKSANA PDKB") + 1 : 5;
-    const picUnitIdx = headers.indexOf("PIC UNIT") > -1 ? headers.indexOf("PIC UNIT") + 1 : 6;
-    const tanggalColIdx = headers.indexOf("TANGGAL DIRENCANAKAN") > -1 ? headers.indexOf("TANGGAL DIRENCANAKAN") + 1 : 7;
+    const headers = data[0].map(h => h ? String(h).toUpperCase().trim() : "");
+    const getColIndex = (checkFn, fallbackIdx) => {
+      const idx = headers.findIndex(checkFn);
+      return idx > -1 ? idx + 1 : fallbackIdx;
+    };
 
-    const rowIndex = findRowIndexByNoWo(sheetApprovalReview, noWo);
+    const noWoColIdx = getColIndex(h => {
+      const clean = h.replace(/[\.\s_\-]/g, "");
+      return clean === "NOWO" || clean === "NOMORWO" || (h.includes("NO") && h.includes("WO"));
+    }, 1);
+
+    const prefStatusColIdx = getColIndex(h => 
+      (h.includes("APPROVAL") && h.includes("PREPARATOR")) || 
+      h === "KEPUTUSAN" || 
+      h === "STATUS APPROVAL" || 
+      h === "STATUS"
+    , 2);
+
+    const prefKetColIdx = getColIndex(h => 
+      (h.includes("KET") || h.includes("CATATAN")) && h.includes("PREPARATOR")
+    , 3);
+
+    const tanggalColIdx = getColIndex(h => 
+      h.includes("TANGGAL DIRENCANAKAN") || 
+      h.includes("TGL DIRENCANAKAN") || 
+      h.includes("TANGGAL RENCANA") || 
+      (h.includes("TANGGAL") && h.includes("RENCANA"))
+    , 4);
+
+    const pelaksanaIdx = getColIndex(h => 
+      h.includes("PELAKSANA")
+    , 5);
+
+    const picUnitIdx = getColIndex(h => 
+      h.includes("PIC")
+    , 6);
+
+    const rowIndex = findRowIndexByNoWo(sheet, noWo);
     const tglRen = formatDateToID(approval.tanggalRencana) || "";
-    
+
     if (rowIndex > -1) {
-       // Update existing row independently to preserve formulas in other columns like NO. WO
-       if (prefStatusColIdx > 0 && prefStatusColIdx !== noWoColIdx) sheetApprovalReview.getRange(rowIndex, prefStatusColIdx).setValue(approval.status || "");
-       if (prefKetColIdx > 0 && prefKetColIdx !== noWoColIdx) sheetApprovalReview.getRange(rowIndex, prefKetColIdx).setValue(approval.keterangan || "");
-       if (pelaksanaIdx > 0 && pelaksanaIdx !== noWoColIdx) sheetApprovalReview.getRange(rowIndex, pelaksanaIdx).setValue(approval.pelaksanaPdkb || "");
-       if (picUnitIdx > 0 && picUnitIdx !== noWoColIdx) sheetApprovalReview.getRange(rowIndex, picUnitIdx).setValue(approval.picUnit || "");
-       if (tanggalColIdx > 0 && tanggalColIdx !== noWoColIdx) sheetApprovalReview.getRange(rowIndex, tanggalColIdx).setValue(tglRen);
+      // Update existing row independently to preserve formulas in other columns like NO. WO
+      if (prefStatusColIdx > 0 && prefStatusColIdx !== noWoColIdx) sheet.getRange(rowIndex, prefStatusColIdx).setValue(approval.status || "");
+      if (prefKetColIdx > 0 && prefKetColIdx !== noWoColIdx) sheet.getRange(rowIndex, prefKetColIdx).setValue(approval.keterangan || "");
+      if (tanggalColIdx > 0 && tanggalColIdx !== noWoColIdx) sheet.getRange(rowIndex, tanggalColIdx).setValue(tglRen);
+      if (pelaksanaIdx > 0 && pelaksanaIdx !== noWoColIdx) sheet.getRange(rowIndex, pelaksanaIdx).setValue(approval.pelaksanaPdkb || "");
+      if (picUnitIdx > 0 && picUnitIdx !== noWoColIdx) sheet.getRange(rowIndex, picUnitIdx).setValue(approval.picUnit || "");
     } else {
-       // Baris belum ada di sheet APPROVAL REVIEW: append baris baru
-       let newRow = new Array(headers.length).fill("");
-       if (noWoColIdx > 0) newRow[noWoColIdx - 1] = noWo;
-       if (prefStatusColIdx > 0) newRow[prefStatusColIdx - 1] = approval.status || "";
-       if (prefKetColIdx > 0) newRow[prefKetColIdx - 1] = approval.keterangan || "";
-       if (pelaksanaIdx > 0) newRow[pelaksanaIdx - 1] = approval.pelaksanaPdkb || "";
-       if (picUnitIdx > 0) newRow[picUnitIdx - 1] = approval.picUnit || "";
-       if (tanggalColIdx > 0) newRow[tanggalColIdx - 1] = tglRen;
-       sheetApprovalReview.appendRow(newRow);
+      // Baris belum ada: append baris baru sesuai urutan header
+      let newRow = new Array(headers.length).fill("");
+      if (noWoColIdx > 0) newRow[noWoColIdx - 1] = noWo;
+      if (prefStatusColIdx > 0) newRow[prefStatusColIdx - 1] = approval.status || "";
+      if (prefKetColIdx > 0) newRow[prefKetColIdx - 1] = approval.keterangan || "";
+      if (tanggalColIdx > 0) newRow[tanggalColIdx - 1] = tglRen;
+      if (pelaksanaIdx > 0) newRow[pelaksanaIdx - 1] = approval.pelaksanaPdkb || "";
+      if (picUnitIdx > 0) newRow[picUnitIdx - 1] = approval.picUnit || "";
+      sheet.appendRow(newRow);
     }
   }
+
+  // Cari dan sinkronkan ke sheet REVIEW_WO maupun APPROVAL REVIEW jika ada
+  const targetApprovalSheets = [
+    reviewWoSS.getSheetByName("APPROVAL REVIEW"),
+    reviewWoSS.getSheetByName("REVIEW_WO"),
+    reviewWoSS.getSheetByName("REVIEW WO"),
+    reviewWoSS.getSheetByName("APPROVAL")
+  ].filter(Boolean);
+
+  if (targetApprovalSheets.length === 0) {
+    const newSheet = reviewWoSS.insertSheet("APPROVAL REVIEW");
+    newSheet.appendRow([
+      "NO. WO", "APPROVAL PREPARATOR", "KET PREPARATOR", "TANGGAL DIRENCANAKAN", "PELAKSANA PDKB", "PIC UNIT"
+    ]);
+    targetApprovalSheets.push(newSheet);
+  }
+
+  targetApprovalSheets.forEach(function(s) {
+    saveApprovalToTargetSheet(s);
+  });
 
   // 10. Update TRACKING sheet dan WORK PLAN sheet pada spreadsheet WORK_PLAN (setiap submit review WO)
   try {
@@ -2104,9 +2174,12 @@ function handleSubmitReviewForm(payload) {
  */
 function handleGetReviewedWOs() {
   const reviewWoSS = SpreadsheetApp.openById(SPREADSHEETS.REVIEW_WO);
-  const sheetApproval = reviewWoSS.getSheetByName("APPROVAL REVIEW");
+  const sheetApproval = reviewWoSS.getSheetByName("APPROVAL REVIEW") ||
+                        reviewWoSS.getSheetByName("REVIEW_WO") ||
+                        reviewWoSS.getSheetByName("REVIEW WO") ||
+                        reviewWoSS.getSheetByName("APPROVAL");
   if (!sheetApproval)
-    return { success: false, message: "Sheet APPROVAL REVIEW tidak ditemukan" };
+    return { success: false, message: "Sheet APPROVAL REVIEW / REVIEW_WO tidak ditemukan" };
 
   const data = sheetApproval.getDataRange().getValues();
   const headers = data.shift();
@@ -2221,7 +2294,10 @@ function handleGetReviewDetail(payload) {
   const area = getSheetData("KON_SEKITAR")[0] || {};
   const konstruksi = getSheetData("KON_KONSTRUKSI")[0] || {};
   const hazards = getSheetData("HAZARD");
-  const approval = getSheetData("APPROVAL REVIEW")[0] || {};
+  const approval = getSheetData("APPROVAL REVIEW")[0] ||
+                   getSheetData("REVIEW_WO")[0] ||
+                   getSheetData("REVIEW WO")[0] ||
+                   getSheetData("APPROVAL")[0] || {};
 
   // Get full WO data
   const woSS = SpreadsheetApp.openById(SPREADSHEETS.WORK_ORDER);

@@ -319,8 +319,8 @@ export default function ReviewWO() {
   ];
 
   const handleSubmit = async () => {
-    if (!templateRowIndex) {
-      alert("Row Index tidak ditemukan (dari Work Order).");
+    if (!templateNoWo) {
+      alert("Nomor Work Order tidak ditemukan.");
       return;
     }
     setLoading(true);
@@ -345,7 +345,7 @@ export default function ReviewWO() {
     }
 
     const res = await gasService.post('submitReviewForm', {
-      rowIndex: parseInt(templateRowIndex),
+      rowIndex: parseInt(templateRowIndex || '0') || 0,
       noWo: templateNoWo,
       pekerjaan,
       materials,
@@ -848,18 +848,26 @@ export default function ReviewWO() {
                                              <div>
                                                <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Status</div>
                                                <div className={cn("text-xs font-bold uppercase", viewingDetail.details?.approval?.['APPROVAL PREPARATOR']?.toLowerCase().includes('tidak layak') ? 'text-red-400' : viewingDetail.details?.approval?.['APPROVAL PREPARATOR']?.toLowerCase().includes('layak') ? 'text-green-400' : 'text-yellow-400')}>
-                                                 {viewingDetail.details?.approval?.['APPROVAL PREPARATOR'] || '-'}
+                                                 {viewingDetail.details?.approval?.['APPROVAL PREPARATOR'] || viewingDetail.approvalPreparator || '-'}
                                                </div>
                                              </div>
                                              <div>
                                                <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Tanggal Direncanakan</div>
                                                <div className="text-xs font-mono">
-                                                 {formatDate(viewingDetail.details?.approval?.['TANGGAL DIRENCANAKAN'])}
+                                                 {formatDate(viewingDetail.details?.approval?.['TANGGAL DIRENCANAKAN'] || viewingDetail.tanggalRencanakan)}
                                                </div>
+                                             </div>
+                                             <div>
+                                               <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Pelaksana PDKB</div>
+                                               <div className="text-xs">{viewingDetail.details?.approval?.['PELAKSANA PDKB'] || viewingDetail.details?.pelaksana_pdkb || '-'}</div>
+                                             </div>
+                                             <div>
+                                               <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">PIC Unit</div>
+                                               <div className="text-xs">{viewingDetail.details?.approval?.['PIC UNIT'] || viewingDetail.details?.pic_unit || '-'}</div>
                                              </div>
                                              <div className="md:col-span-2">
                                                <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Keterangan</div>
-                                               <div className="text-xs">{viewingDetail.details?.approval?.['KET PREPARATOR'] || '-'}</div>
+                                               <div className="text-xs">{viewingDetail.details?.approval?.['KET PREPARATOR'] || viewingDetail.ketPreparator || '-'}</div>
                                              </div>
                                            </div>
                                          </section>
