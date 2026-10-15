@@ -264,34 +264,46 @@ function formatDateToID(val) {
  */
 function findRowIndexByNoWo(sheet, targetNoWo) {
   if (!sheet || targetNoWo === undefined || targetNoWo === null || targetNoWo === "") return -1;
-  const data = sheet.getDataRange().getValues();
+  const range = sheet.getDataRange();
+  const data = range.getValues();
   if (data.length <= 1) return -1;
+  const displayData = range.getDisplayValues();
+
   const headers = data[0].map(h => h ? String(h).toUpperCase().trim() : "");
+  
+  // Prioritas 1: Header yang jelas mengandung NO dan WO (misal "NO. WO", "NO WO", "NOMOR WO", "ID WO")
   let noWoColIdx = headers.findIndex(h => {
     const clean = h.replace(/[\.\s_\-]/g, "");
-    return clean === "NOWO" || clean === "NOMORWO" || clean === "NO" || clean === "IDWO" || clean === "WO";
+    return clean === "NOWO" || clean === "NOMORWO" || clean === "IDWO" || (h.includes("NO") && h.includes("WO"));
   });
+  
+  // Prioritas 2: Header yang sama persis dengan "WO"
   if (noWoColIdx === -1) {
-    noWoColIdx = headers.findIndex(h => h.includes("NO") && h.includes("WO"));
+    noWoColIdx = headers.findIndex(h => h.replace(/[\.\s_\-]/g, "") === "WO");
   }
-  if (noWoColIdx === -1) noWoColIdx = 0; // Default kolom A (1st column)
+  
+  // Default kolom pertama (0) jika tidak ditemukan
+  if (noWoColIdx === -1) noWoColIdx = 0;
 
   const target = String(targetNoWo).trim().toLowerCase();
   const targetNum = parseInt(target.replace(/\D/g, ""), 10);
 
-  // 1. Cek di kolom noWoColIdx terlebih dahulu
+  // 1. Cek di kolom noWoColIdx terlebih dahulu (cek nilai mentah maupun nilai display formula)
   for (let i = 1; i < data.length; i++) {
-    const cellVal = data[i][noWoColIdx];
-    if (cellVal !== undefined && cellVal !== null && cellVal !== "") {
-      const cellStr = String(cellVal).trim().toLowerCase();
-      if (cellStr === target) {
-        return i + 1; // 1-based index untuk Google Sheets Range
-      }
-      if (!isNaN(targetNum) && targetNum > 0) {
-        const cellNum = parseInt(cellStr.replace(/\D/g, ""), 10);
-        if (cellNum === targetNum && cellStr.includes(String(targetNum))) {
-          return i + 1;
-        }
+    const rawVal = data[i][noWoColIdx];
+    const dispVal = displayData && displayData[i] ? displayData[i][noWoColIdx] : "";
+    const str1 = String(rawVal !== undefined && rawVal !== null ? rawVal : "").trim().toLowerCase();
+    const str2 = String(dispVal || "").trim().toLowerCase();
+
+    if (str1 === target || str2 === target) {
+      return i + 1; // 1-based index untuk Google Sheets Range
+    }
+    if (!isNaN(targetNum) && targetNum > 0) {
+      const num1 = parseInt(str1.replace(/\D/g, ""), 10);
+      const num2 = parseInt(str2.replace(/\D/g, ""), 10);
+      if ((num1 === targetNum && str1.includes(String(targetNum))) || 
+          (num2 === targetNum && str2.includes(String(targetNum)))) {
+        return i + 1;
       }
     }
   }
@@ -299,10 +311,18 @@ function findRowIndexByNoWo(sheet, targetNoWo) {
   // 2. Fallback scan seluruh kolom jika baris menggunakan struktur kolom berbeda
   for (let i = 1; i < data.length; i++) {
     for (let c = 0; c < data[i].length; c++) {
-      const cellVal = data[i][c];
-      if (cellVal !== undefined && cellVal !== null && cellVal !== "") {
-        const cellStr = String(cellVal).trim().toLowerCase();
-        if (cellStr === target) {
+      const rawVal = data[i][c];
+      const dispVal = displayData && displayData[i] ? displayData[i][c] : "";
+      const str1 = String(rawVal !== undefined && rawVal !== null ? rawVal : "").trim().toLowerCase();
+      const str2 = String(dispVal || "").trim().toLowerCase();
+
+      if (str1 === target || str2 === target) {
+        return i + 1;
+      }
+      if (!isNaN(targetNum) && targetNum > 0) {
+        const num1 = parseInt(str1.replace(/\D/g, ""), 10);
+        const num2 = parseInt(str2.replace(/\D/g, ""), 10);
+        if (num1 === targetNum || num2 === targetNum) {
           return i + 1;
         }
       }
@@ -1774,13 +1794,47 @@ function handleUpdateApproval(payload) {
 }
 
 function deleteRowsByNoWo(sheet, noWo) {
-  if (!sheet) return;
-  const data = sheet.getDataRange().getValues();
+  if (!sheet || !noWo) return;
+  const sheetName = sheet.getName();
+  // Proteksi: JANGAN PERNAH menghapus baris di sheet REVIEW_WO, APPROVAL, PEKERJAAN, KON_*
+  // agar rumus/formula yang sudah terpasang di sheet tidak rusak / menghasilkan error #REF!
+  const protectedSheets = [
+    "REVIEW_WO", "REVIEW WO", "APPROVAL REVIEW", "APPROVAL",
+    "PEKERJAAN", "PEKERJAN", "KON_SEKITAR", "KON_KONSTRUKSI"
+  ];
+  if (protectedSheets.some(p => sheetName.toUpperCase().includes(p))) {
+    return;
+  }
+
+  const range = sheet.getDataRange();
+  const data = range.getValues();
+  const displayData = range.getDisplayValues();
+  const targetStr = String(noWo).trim().toLowerCase();
+  const targetNum = parseInt(targetStr.replace(/\D/g, ""), 10);
+
   // Go backwards to not mess up indices when deleting
   for (let i = data.length - 1; i >= 1; i--) {
-    // skip header
-    if (String(data[i][0]).trim() === String(noWo).trim()) {
-      sheet.deleteRow(i + 1);
+    const rawVal = String(data[i][0] !== undefined && data[i][0] !== null ? data[i][0] : "").trim().toLowerCase();
+    const dispVal = String(displayData[i] && displayData[i][0] !== undefined ? displayData[i][0] : "").trim().toLowerCase();
+    const isMatch = (rawVal === targetStr || dispVal === targetStr ||
+      (!isNaN(targetNum) && targetNum > 0 && (
+        parseInt(rawVal.replace(/\D/g, ""), 10) === targetNum ||
+        parseInt(dispVal.replace(/\D/g, ""), 10) === targetNum
+      )));
+
+    if (isMatch) {
+      const cell = sheet.getRange(i + 1, 1);
+      // Jika cell NO. WO memiliki formula, JANGAN HAPUS BARIS!
+      // Cukup bersihkan kolom data berikutnya agar formula tetap utuh
+      const formula = cell.getFormula();
+      if (formula && formula.trim() !== "") {
+        const lastCol = sheet.getLastColumn();
+        if (lastCol > 1) {
+          sheet.getRange(i + 1, 2, 1, lastCol - 1).clearContent();
+        }
+      } else {
+        sheet.deleteRow(i + 1);
+      }
     }
   }
 }
@@ -2022,10 +2076,11 @@ function handleSubmitReviewForm(payload) {
   }
 
   // 9. Save Approval Review Details
-  // Pastikan data pada tab APPROVAL disimpan berdasarkan NO. WO terkait di sheet REVIEW_WO / APPROVAL REVIEW
+  // Pastikan ketika user submit FORM REVIEW WO, data pada tab APPROVAL disimpan berdasarkan NO. WO terkait di sheet REVIEW_WO
   function saveApprovalToTargetSheet(sheet) {
     if (!sheet || !approval) return;
-    let data = sheet.getDataRange().getValues();
+    const range = sheet.getDataRange();
+    let data = range.getValues();
     if (data.length === 0) {
       sheet.appendRow([
         "NO. WO", "APPROVAL PREPARATOR", "KET PREPARATOR", "TANGGAL DIRENCANAKAN", "PELAKSANA PDKB", "PIC UNIT"
@@ -2038,9 +2093,10 @@ function handleSubmitReviewForm(payload) {
       return idx > -1 ? idx + 1 : fallbackIdx;
     };
 
+    // Cari kolom NO. WO dengan teliti agar tidak salah mendeteksi kolom lain
     const noWoColIdx = getColIndex(h => {
       const clean = h.replace(/[\.\s_\-]/g, "");
-      return clean === "NOWO" || clean === "NOMORWO" || (h.includes("NO") && h.includes("WO"));
+      return clean === "NOWO" || clean === "NOMORWO" || clean === "IDWO" || (h.includes("NO") && h.includes("WO"));
     }, 1);
 
     const prefStatusColIdx = getColIndex(h => 
@@ -2051,7 +2107,8 @@ function handleSubmitReviewForm(payload) {
     , 2);
 
     const prefKetColIdx = getColIndex(h => 
-      (h.includes("KET") || h.includes("CATATAN")) && h.includes("PREPARATOR")
+      ((h.includes("KET") || h.includes("CATATAN")) && (h.includes("PREPARATOR") || h.includes("APPROVAL"))) ||
+      h === "KETERANGAN" || h === "CATATAN"
     , 3);
 
     const tanggalColIdx = getColIndex(h => 
@@ -2073,35 +2130,38 @@ function handleSubmitReviewForm(payload) {
     const tglRen = formatDateToID(approval.tanggalRencana) || "";
 
     if (rowIndex > -1) {
-      // Update existing row independently to preserve formulas in other columns like NO. WO
+      // PENTING: Baris NO. WO ditemukan!
+      // Update HANYA kolom data Approval pada baris tersebut.
+      // JANGAN PERNAH menyentuh kolom noWoColIdx (agar formula/rumus di kolom NO. WO tetap 100% utuh).
+      // JANGAN PERNAH memanggil deleteRow!
       if (prefStatusColIdx > 0 && prefStatusColIdx !== noWoColIdx) sheet.getRange(rowIndex, prefStatusColIdx).setValue(approval.status || "");
       if (prefKetColIdx > 0 && prefKetColIdx !== noWoColIdx) sheet.getRange(rowIndex, prefKetColIdx).setValue(approval.keterangan || "");
       if (tanggalColIdx > 0 && tanggalColIdx !== noWoColIdx) sheet.getRange(rowIndex, tanggalColIdx).setValue(tglRen);
       if (pelaksanaIdx > 0 && pelaksanaIdx !== noWoColIdx) sheet.getRange(rowIndex, pelaksanaIdx).setValue(approval.pelaksanaPdkb || "");
       if (picUnitIdx > 0 && picUnitIdx !== noWoColIdx) sheet.getRange(rowIndex, picUnitIdx).setValue(approval.picUnit || "");
     } else {
-      // Baris belum ada: append baris baru sesuai urutan header
+      // Jika baris belum ada sama sekali di sheet: baru buat baris baru di bawah
       let newRow = new Array(headers.length).fill("");
       if (noWoColIdx > 0) newRow[noWoColIdx - 1] = noWo;
-      if (prefStatusColIdx > 0) newRow[prefStatusColIdx - 1] = approval.status || "";
-      if (prefKetColIdx > 0) newRow[prefKetColIdx - 1] = approval.keterangan || "";
-      if (tanggalColIdx > 0) newRow[tanggalColIdx - 1] = tglRen;
-      if (pelaksanaIdx > 0) newRow[pelaksanaIdx - 1] = approval.pelaksanaPdkb || "";
-      if (picUnitIdx > 0) newRow[picUnitIdx - 1] = approval.picUnit || "";
+      if (prefStatusColIdx > 0 && prefStatusColIdx !== noWoColIdx) newRow[prefStatusColIdx - 1] = approval.status || "";
+      if (prefKetColIdx > 0 && prefKetColIdx !== noWoColIdx) newRow[prefKetColIdx - 1] = approval.keterangan || "";
+      if (tanggalColIdx > 0 && tanggalColIdx !== noWoColIdx) newRow[tanggalColIdx - 1] = tglRen;
+      if (pelaksanaIdx > 0 && pelaksanaIdx !== noWoColIdx) newRow[pelaksanaIdx - 1] = approval.pelaksanaPdkb || "";
+      if (picUnitIdx > 0 && picUnitIdx !== noWoColIdx) newRow[picUnitIdx - 1] = approval.picUnit || "";
       sheet.appendRow(newRow);
     }
   }
 
-  // Cari dan sinkronkan ke sheet REVIEW_WO maupun APPROVAL REVIEW jika ada
+  // Prioritaskan sheet REVIEW_WO sesuai permintaan pengguna
   const targetApprovalSheets = [
-    reviewWoSS.getSheetByName("APPROVAL REVIEW"),
     reviewWoSS.getSheetByName("REVIEW_WO"),
     reviewWoSS.getSheetByName("REVIEW WO"),
+    reviewWoSS.getSheetByName("APPROVAL REVIEW"),
     reviewWoSS.getSheetByName("APPROVAL")
   ].filter(Boolean);
 
   if (targetApprovalSheets.length === 0) {
-    const newSheet = reviewWoSS.insertSheet("APPROVAL REVIEW");
+    const newSheet = reviewWoSS.insertSheet("REVIEW_WO");
     newSheet.appendRow([
       "NO. WO", "APPROVAL PREPARATOR", "KET PREPARATOR", "TANGGAL DIRENCANAKAN", "PELAKSANA PDKB", "PIC UNIT"
     ]);
@@ -2174,12 +2234,12 @@ function handleSubmitReviewForm(payload) {
  */
 function handleGetReviewedWOs() {
   const reviewWoSS = SpreadsheetApp.openById(SPREADSHEETS.REVIEW_WO);
-  const sheetApproval = reviewWoSS.getSheetByName("APPROVAL REVIEW") ||
-                        reviewWoSS.getSheetByName("REVIEW_WO") ||
+  const sheetApproval = reviewWoSS.getSheetByName("REVIEW_WO") ||
                         reviewWoSS.getSheetByName("REVIEW WO") ||
+                        reviewWoSS.getSheetByName("APPROVAL REVIEW") ||
                         reviewWoSS.getSheetByName("APPROVAL");
   if (!sheetApproval)
-    return { success: false, message: "Sheet APPROVAL REVIEW / REVIEW_WO tidak ditemukan" };
+    return { success: false, message: "Sheet REVIEW_WO / APPROVAL REVIEW tidak ditemukan" };
 
   const data = sheetApproval.getDataRange().getValues();
   const headers = data.shift();
@@ -2294,9 +2354,9 @@ function handleGetReviewDetail(payload) {
   const area = getSheetData("KON_SEKITAR")[0] || {};
   const konstruksi = getSheetData("KON_KONSTRUKSI")[0] || {};
   const hazards = getSheetData("HAZARD");
-  const approval = getSheetData("APPROVAL REVIEW")[0] ||
-                   getSheetData("REVIEW_WO")[0] ||
+  const approval = getSheetData("REVIEW_WO")[0] ||
                    getSheetData("REVIEW WO")[0] ||
+                   getSheetData("APPROVAL REVIEW")[0] ||
                    getSheetData("APPROVAL")[0] || {};
 
   // Get full WO data
@@ -3575,7 +3635,15 @@ function handleUpdateRealisasiStatus(payload) {
         const dataRWM = sheetMaterials.getDataRange().getValues();
         for (let i = dataRWM.length - 1; i >= 1; i--) {
           if (String(dataRWM[i][0]).trim() === String(noWo).trim()) {
-            sheetMaterials.deleteRow(i + 1);
+            const cell = sheetMaterials.getRange(i + 1, 1);
+            if (cell.getFormula() && cell.getFormula().trim() !== "") {
+              const lastCol = sheetMaterials.getLastColumn();
+              if (lastCol > 1) {
+                sheetMaterials.getRange(i + 1, 2, 1, lastCol - 1).clearContent();
+              }
+            } else {
+              sheetMaterials.deleteRow(i + 1);
+            }
           }
         }
         // insert new materials
