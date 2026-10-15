@@ -103,8 +103,8 @@ export default function WorkOrder() {
         .sort((a: any, b: any) => {
           const getCleanNum = (val: any) => {
             const s = String(val || '').trim();
-            const m = s.match(/^\d+/);
-            return m ? parseInt(m[0], 10) : (parseInt(s.replace(/\D/g, ''), 10) || 0);
+            const m = s.match(/^(?:WO[-_\s]*)?(\d+)/i);
+            return m ? parseInt(m[1], 10) : (parseInt(s.replace(/\D/g, ''), 10) || 0);
           };
           return getCleanNum(b.noWo || b.id) - getCleanNum(a.noWo || a.id);
         });

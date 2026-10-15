@@ -45,14 +45,31 @@ export function createApp() {
     try {
       // 1. FAST WRITE: Write to Supabase & Mirror asynchronously to Google Sheet
       if (isWrite) {
-        const writeResult = await handleSupabaseWrite(action, payload);
-        return res.json(writeResult);
+        try {
+          const writeResult = await handleSupabaseWrite(action, payload);
+          return res.json(writeResult);
+        } catch (sbWriteErr: any) {
+          console.warn(`[SUPABASE WRITE FAILED -> FALLBACK TO GAS] Action: ${action}`, sbWriteErr?.message || sbWriteErr);
+          // Fallback to GAS directly so data is never lost
+          const gasRes = await fetch(GAS_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ action, payload })
+          });
+          const gasJson = await gasRes.json();
+          return res.json(gasJson);
+        }
       }
 
-      // 2. FAST READ: Query Supabase directly (< 300ms)
-      const supabaseReadResult = await handleSupabaseRead(action, payload);
-      if (supabaseReadResult !== null) {
-        return res.json(supabaseReadResult);
+      // 2. FAST READ: Query Supabase directly (< 300ms) with graceful failover to GAS
+      try {
+        const supabaseReadResult = await handleSupabaseRead(action, payload);
+        if (supabaseReadResult !== null) {
+          return res.json(supabaseReadResult);
+        }
+      } catch (sbReadErr: any) {
+        console.warn(`[SUPABASE READ FAILED -> FALLBACK TO GAS] Action: ${action}`, sbReadErr?.message || sbReadErr);
+        // Seamlessly continue to GAS fallback below
       }
 
       // 3. Fallback to GAS for unhandled actions with Stale-While-Revalidate caching

@@ -1726,7 +1726,55 @@ export async function getWarehouseAggregatedOverview(): Promise<any> {
 
 // Memory cache to avoid querying Supabase repeatedly on high-traffic reads
 const cache = new Map<string, { data: any; expiry: number }>();
-const CACHE_TTL = 30000; // 30 seconds
+const CACHE_TTL = 600000; // 10 minutes (600 seconds) for ultra-low egress
+
+/**
+ * Update in-memory cache directly on mutations without flushing everything,
+ * ensuring users see updates immediately without triggering mass database queries.
+ */
+export function updateCachedWorkOrder(newWo: any) {
+  for (const [key, cached] of cache.entries()) {
+    if (key.includes('getWorkOrders') && Array.isArray(cached?.data)) {
+      const idx = cached.data.findIndex((w: any) => String(w.noWo || w.id).trim() === String(newWo.noWo || newWo.id).trim());
+      if (idx !== -1) {
+        cached.data[idx] = { ...cached.data[idx], ...newWo };
+      } else {
+        cached.data.unshift(newWo);
+      }
+      cached.expiry = Date.now() + CACHE_TTL;
+    }
+  }
+}
+
+export function updateCachedWorkPlan(updatedPlan: any) {
+  for (const [key, cached] of cache.entries()) {
+    if (key.includes('getWorkPlans') && Array.isArray(cached?.data)) {
+      const targetNo = String(updatedPlan['NO. WO'] || updatedPlan['NO WO'] || updatedPlan.no_wo || '').trim();
+      const idx = cached.data.findIndex((p: any) => String(p['NO. WO'] || p['NO WO'] || p.no_wo || '').trim() === targetNo);
+      if (idx !== -1) {
+        cached.data[idx] = { ...cached.data[idx], ...updatedPlan };
+      } else {
+        cached.data.unshift(updatedPlan);
+      }
+      cached.expiry = Date.now() + CACHE_TTL;
+    }
+  }
+}
+
+export function updateCachedRealisasi(updatedReal: any) {
+  for (const [key, cached] of cache.entries()) {
+    if (key.includes('getRealisasiList') && Array.isArray(cached?.data)) {
+      const targetNo = String(updatedReal['NO. WO'] || updatedReal['NO WO'] || updatedReal.no_wo || '').trim();
+      const idx = cached.data.findIndex((r: any) => String(r['NO. WO'] || r['NO WO'] || r.no_wo || '').trim() === targetNo);
+      if (idx !== -1) {
+        cached.data[idx] = { ...cached.data[idx], ...updatedReal };
+      } else {
+        cached.data.unshift(updatedReal);
+      }
+      cached.expiry = Date.now() + CACHE_TTL;
+    }
+  }
+}
 
 export function clearBackendCache(pattern?: string) {
   if (!pattern) {
@@ -1775,6 +1823,102 @@ async function fetchAllRows(table: string, select = '*', orderCol = 'id', ascend
     from += step;
   }
   return all;
+}
+
+/**
+ * Helper to get the true maximum numerical work order number across all records and calculate the next WO
+ */
+export async function getNextWorkOrderNumber(): Promise<{ noWo: string; numericWo: number }> {
+  try {
+    const allRows = await fetchAllRows('work_orders', 'no_wo', 'id', true);
+    let maxWo = 0;
+    for (const row of allRows || []) {
+      const raw = String(row.no_wo || '').trim();
+      if (!raw || /\.(jpg|jpeg|png|webp|gif)$/i.test(raw) || raw.toUpperCase().includes('.FOTO.') || raw.toLowerCase().includes('nama file')) {
+        continue;
+      }
+      const m = raw.match(/^(?:WO[-_\s]*)?(\d+)/i);
+      const val = m ? parseInt(m[1], 10) : parseInt(raw.replace(/\D/g, ''), 10);
+      if (!isNaN(val) && val < 1000000 && val > maxWo) {
+        maxWo = val;
+      }
+    }
+    const nextNum = maxWo > 0 ? maxWo + 1 : 1;
+    return { noWo: String(nextNum), numericWo: nextNum };
+  } catch (err: any) {
+    console.error('[getNextWorkOrderNumber ERROR]', err.message);
+    return { noWo: '1', numericWo: 1 };
+  }
+}
+
+/**
+ * Helper to upload Base64 images directly to Google Drive via GAS and return the lightweight Google Drive URL.
+ * NEVER stores raw Base64 Data URIs in Supabase database to prevent exceeding Egress limits.
+ */
+export async function uploadBase64ToDriveHelper(base64Data: string, fileName: string, folderId?: string): Promise<string | null> {
+  if (!base64Data) return null;
+  const str = String(base64Data).trim();
+  if (str.startsWith('http://') || str.startsWith('https://')) {
+    return str;
+  }
+  if (!str.includes('base64,') && str.length < 50) {
+    return null;
+  }
+  const cleanBase64 = str.includes('base64,') ? str.split('base64,')[1] : str;
+  const mimeType = str.includes('image/png') ? 'image/png' : 'image/jpeg';
+  const targetFolder = folderId || '1urqblbRHzJroJ5i8VjCIpb0iDkBrQNF6';
+
+  try {
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'uploadFileToDrive',
+        payload: {
+          fileBase64: cleanBase64,
+          fileName: fileName,
+          folderId: targetFolder,
+          mimeType: mimeType
+        }
+      })
+    });
+    const json = await res.json();
+    if (json.success && json.fileId) {
+      return `https://lh3.googleusercontent.com/d/${json.fileId}`;
+    }
+    if (json.success && json.fileUrl) {
+      return json.fileUrl;
+    }
+  } catch (err: any) {
+    console.warn('[uploadBase64ToDriveHelper error on primary GAS]', err.message);
+    try {
+      if (GAS_LLC_URL && GAS_LLC_URL !== GAS_URL) {
+        const res2 = await fetch(GAS_LLC_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'uploadFileToDrive',
+            payload: {
+              fileBase64: cleanBase64,
+              fileName: fileName,
+              folderId: targetFolder,
+              mimeType: mimeType
+            }
+          })
+        });
+        const json2 = await res2.json();
+        if (json2.success && json2.fileId) {
+          return `https://lh3.googleusercontent.com/d/${json2.fileId}`;
+        }
+        if (json2.success && json2.fileUrl) {
+          return json2.fileUrl;
+        }
+      }
+    } catch (err2: any) {
+      console.warn('[uploadBase64ToDriveHelper error on fallback GAS]', err2.message);
+    }
+  }
+  return null;
 }
 
 /**
@@ -2015,9 +2159,9 @@ function formatDbTracking(dbTrack: any, wp: any, memTrack?: any): any {
  */
 async function computeDashboardStats(filters: any = {}): Promise<any> {
   const [wos, realisasi, wps] = await Promise.all([
-    fetchAllRows('work_orders', '*', 'id', true),
-    fetchAllRows('realisasi', '*', 'id', true),
-    fetchAllRows('work_plans', '*', 'id', true)
+    fetchAllRows('work_orders', 'no_wo, temuan, status, tanggal, ulp, gardu_induk, penyulang', 'id', true),
+    fetchAllRows('realisasi', 'no_wo, tanggal_realisasi, tanggal_direncanakan, kwh_diselamatkan, rupiah_diselamatkan, saidi, saifi, ulp, gardu_induk, penyulang, konfirmasi', 'id', true),
+    fetchAllRows('work_plans', 'no_wo, sop_pekerjaan, kategori, tanggal_direncanakan', 'id', true)
   ]);
 
   // Sort WOs descending by numeric no_wo for recentWOs
@@ -2310,7 +2454,8 @@ export async function handleSupabaseRead(action: string, payload: any): Promise<
     }
 
     case 'getWorkOrders': {
-      let data = await fetchAllRows('work_orders', '*', 'id', true);
+      const WO_COLUMNS = 'id, no_wo, tanggal, surveyor, ulp, gardu_induk, penyulang, segmen, temuan, kategori, status, alamat, koordinat, skala_prioritas, jenis_tiang, ukuran_tiang, jenis_konduktor, ukuran_konduktor, keypoint, keterangan, foto, approval_asman, ket_asman, approval_tl, ket_tl, approval_preparator, ket_preparator, tanggal_rencanakan';
+      let data = await fetchAllRows('work_orders', WO_COLUMNS, 'id', true);
 
       // Filter out any non-WO rows or image files
       data = data.filter((w: any) => {
@@ -2373,7 +2518,8 @@ export async function handleSupabaseRead(action: string, payload: any): Promise<
     }
 
     case 'getReviewedWOs': {
-      let data = await fetchAllRows('work_orders', '*', 'id', true);
+      const WO_REVIEW_COLUMNS = 'id, no_wo, tanggal, surveyor, ulp, gardu_induk, penyulang, segmen, alamat, temuan, status, foto, approval_preparator, ket_preparator, tanggal_rencanakan';
+      let data = await fetchAllRows('work_orders', WO_REVIEW_COLUMNS, 'id', true);
       data = data.filter((w: any) => {
         const no = String(w.no_wo || '').trim();
         return no && !/\.(jpg|jpeg|png|webp|gif)$/i.test(no) && !no.toUpperCase().includes('.FOTO.');
@@ -2443,7 +2589,8 @@ export async function handleSupabaseRead(action: string, payload: any): Promise<
     }
 
     case 'getWorkPlans': {
-      const data = await fetchAllRows('work_plans', '*', 'id', true);
+      const WP_COLUMNS = 'id, no_wo, tanggal_direncanakan, surveyor, ulp, gardu_induk, penyulang, segmen, temuan, alamat, kategori, skala_prioritas, titik_koordinat, jenis_tiang, ukuran_tiang, jenis_konduktor, ukuran_konduktor, keypoint, keterangan, foto_temuan, sop_pekerjaan, instruksi_kerja, detail_pekerjaan, wp, ibppr, jsa, sp2b, sp3b, tailgate_session, status_berkas, progres, tanggal_realisasi, konfirmasi';
+      const data = await fetchAllRows('work_plans', WP_COLUMNS, 'id', true);
 
       // Urutkan Work Plan seperti sebelumnya: tanggal direncanakan terbaru, kemudian nomor WO terbesar di atas
       data.sort((a: any, b: any) => {
@@ -3252,30 +3399,34 @@ export async function handleSupabaseRead(action: string, payload: any): Promise<
     }
 
     case 'getRealisasiList': {
-      const data = await fetchAllRows('realisasi', '*', 'id', true);
+      const REAL_COLUMNS = 'id, no_wo, tanggal_direncanakan, tanggal_realisasi, surveyor, ulp, gardu_induk, penyulang, segmen, temuan, alamat, detail_pekerjaan, material_terpakai, beban_a, pelanggan_padam, jumlah_pelanggan, durasi, rp_per_kwh, kwh_diselamatkan, rupiah_diselamatkan, saidi, saifi, konfirmasi, foto_sebelum, foto_realisasi';
+      const data = await fetchAllRows('realisasi', REAL_COLUMNS, 'id', true);
 
       // Pre-fetch work_orders foto, work_plans foto_temuan, and tracking photos for fallback thumbnails
       const woPhotoMap = new Map<string, string>();
       try {
-        const [woRes, wpRes, trRes] = await Promise.all([
-          supabaseAdmin.from('work_orders').select('no_wo, foto'),
-          supabaseAdmin.from('work_plans').select('no_wo, foto_temuan'),
-          supabaseAdmin.from('tracking').select('no_wo, foto_sebelum, foto_selesai')
-        ]);
-        if (woRes.data) {
-          for (const w of woRes.data) {
-            if (w.no_wo && w.foto) woPhotoMap.set(String(w.no_wo).trim(), formatGoogleDriveUrl(w.foto));
+        const realNos = data.map((r: any) => String(r.no_wo || '').trim()).filter(Boolean);
+        if (realNos.length > 0) {
+          const [woRes, wpRes, trRes] = await Promise.all([
+            supabaseAdmin.from('work_orders').select('no_wo, foto').in('no_wo', realNos),
+            supabaseAdmin.from('work_plans').select('no_wo, foto_temuan').in('no_wo', realNos),
+            supabaseAdmin.from('tracking').select('no_wo, foto_sebelum, foto_selesai').in('no_wo', realNos)
+          ]);
+          if (woRes.data) {
+            for (const w of woRes.data) {
+              if (w.no_wo && w.foto) woPhotoMap.set(String(w.no_wo).trim(), formatGoogleDriveUrl(w.foto));
+            }
           }
-        }
-        if (wpRes.data) {
-          for (const w of wpRes.data) {
-            if (w.no_wo && w.foto_temuan) woPhotoMap.set(String(w.no_wo).trim(), formatGoogleDriveUrl(w.foto_temuan));
+          if (wpRes.data) {
+            for (const w of wpRes.data) {
+              if (w.no_wo && w.foto_temuan) woPhotoMap.set(String(w.no_wo).trim(), formatGoogleDriveUrl(w.foto_temuan));
+            }
           }
-        }
-        if (trRes.data) {
-          for (const t of trRes.data) {
-            const p = t.foto_selesai || t.foto_sebelum;
-            if (t.no_wo && p) woPhotoMap.set(String(t.no_wo).trim(), formatGoogleDriveUrl(p));
+          if (trRes.data) {
+            for (const t of trRes.data) {
+              const p = t.foto_selesai || t.foto_sebelum;
+              if (t.no_wo && p) woPhotoMap.set(String(t.no_wo).trim(), formatGoogleDriveUrl(p));
+            }
           }
         }
       } catch (e) {}
@@ -3610,19 +3761,9 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
       case 'submitWorkOrder': {
         let noWo = payload.noWo ? String(payload.noWo).trim() : '';
         if (!noWo) {
-          // Cari nomor WO numerik tertinggi yang valid di work_orders
-          const { data: woList } = await supabaseAdmin
-            .from('work_orders')
-            .select('no_wo');
-          let maxWo = 0;
-          for (const row of woList || []) {
-            const n = parseInt(String(row.no_wo).replace(/\D/g, ''), 10);
-            if (!isNaN(n) && n < 1000000 && n > maxWo) {
-              maxWo = n;
-            }
-          }
-          const nextWo = maxWo > 0 ? maxWo + 1 : 1;
-          noWo = String(nextWo);
+          // Cari nomor WO numerik tertinggi yang valid di work_orders (dari seluruh data)
+          const nextInfo = await getNextWorkOrderNumber();
+          noWo = nextInfo.noWo;
           payload.noWo = noWo;
         }
 
@@ -3631,11 +3772,17 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
 
         let fotoData = payload.foto || '';
         if (payload.fotoBase64) {
-          fotoData = payload.fotoBase64.startsWith('data:')
-            ? payload.fotoBase64
-            : `data:image/jpeg;base64,${payload.fotoBase64}`;
+          const up = await uploadBase64ToDriveHelper(
+            payload.fotoBase64,
+            `${noWo}.jpg`,
+            '1B3mfOYm1gfznoDlPhZ1SiPQDuGdEukqG'
+          );
+          if (up) fotoData = up;
+          else if (fotoData && (fotoData.startsWith('data:') || fotoData.length > 500)) fotoData = '';
         }
 
+        // HANYA field yang diinput dari form Work Order Baru
+        // Kolom status, approval_asman, ket_asman, approval_tl, ket_tl, approval_preparator, ket_preparator, dan tanggal_rencanakan TIDAK DITIMPA/DIHAPUS
         const woPayload: any = {
           id,
           no_wo: String(noWo),
@@ -3646,7 +3793,7 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
           penyulang: payload.penyulang || '',
           segmen: payload.segmen || '',
           temuan: payload.temuan || '',
-          status: payload.status || '',
+          status: payload.status || 'Menunggu Approval',
           alamat: payload.alamat || '',
           koordinat: payload.koordinat || '',
           skala_prioritas: payload.skalaPrioritas || '',
@@ -3656,15 +3803,8 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
           ukuran_konduktor: payload.ukuranKonduktor || '',
           keypoint: payload.keypoint || '',
           keterangan: payload.keterangan || '',
-          foto: fotoData || null,
-          approval_asman: null,
-          ket_asman: null,
-          approval_tl: null,
-          ket_tl: null,
-          approval_preparator: null,
-          ket_preparator: null,
-          tanggal_rencanakan: null,
-          kategori: payload.kategori || ''
+          foto: (fotoData && fotoData.startsWith('http')) ? fotoData : (fotoData ? null : null),
+          kategori: payload.kategori || 'PEMELIHARAAN'
         };
 
         let { error: woErr } = await supabaseAdmin.from('work_orders').upsert(woPayload, { onConflict: 'no_wo' });
@@ -3677,6 +3817,13 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
         if (woErr) {
           console.error('[SUPABASE WRITE] submitWorkOrder error:', woErr.message);
         }
+
+        // Update selective in-memory cache directly
+        updateCachedWorkOrder({
+          ...woPayload,
+          noWo: String(noWo),
+          id
+        });
 
         // Siapkan payload lengkap untuk Google Apps Script
         payload.noWo = noWo;
@@ -3701,7 +3848,7 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
           clearBackendCache('Llc');
         }
 
-        clearBackendCache('WorkOrder');
+        clearBackendCache('getWorkOrders');
         return { 
           success: true, 
           message: `Work Order No. ${noWo} berhasil disimpan ke Supabase dan Google Sheet.`,
@@ -3831,14 +3978,51 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
           'KETERANGAN': m.keterangan || m['KETERANGAN'] || ''
         }));
 
-        const normalizedHazards = (Array.isArray(payload.hazards) ? payload.hazards : []).map((h: any) => ({
-          'NO. WO': noWo,
-          'NAMA HAZARD': h.nama || h['NAMA HAZARD'] || '',
-          'KETERANGAN': h.keterangan || h['KETERANGAN'] || '',
-          'POTENSI': h.potensi || h['POTENSI'] || '',
-          'RISIKO': h.risiko || h['RISIKO'] || 'Rendah',
-          'MITIGASI': h.mitigasi || h['MITIGASI'] || '',
-          'FOTO HAZARD': h.foto || h['FOTO HAZARD'] || ''
+        const areaObj = payload.area || {};
+        let urlFotoArea = areaObj.fotoArea || areaObj['FOTO AREA'] || '';
+        if (areaObj.fotoAreaBase64) {
+          const up = await uploadBase64ToDriveHelper(areaObj.fotoAreaBase64, `${noWo}-AREA.jpg`, '1YL7u1HiwgTIhYcaVRwIuqOsAGNFJm1Ie');
+          if (up) urlFotoArea = up;
+        }
+        let urlFotoTanah = areaObj.fotoTanah || areaObj['FOTO TANAH'] || '';
+        if (areaObj.fotoTanahBase64) {
+          const up = await uploadBase64ToDriveHelper(areaObj.fotoTanahBase64, `${noWo}-TANAH.jpg`, '1YL7u1HiwgTIhYcaVRwIuqOsAGNFJm1Ie');
+          if (up) urlFotoTanah = up;
+        }
+
+        const konObj = payload.konstruksi || {};
+        let urlFotoSutm = konObj.fotoSutm || konObj['FOTO SUTM'] || '';
+        if (konObj.fotoSutmBase64) {
+          const up = await uploadBase64ToDriveHelper(konObj.fotoSutmBase64, `${noWo}-SUTM.jpg`, '1GQ243ksFCRiGeMEV3fZoQjKjq2dYsIEN');
+          if (up) urlFotoSutm = up;
+        }
+        let urlFotoTiang = konObj.fotoTiang || konObj['FOTO TIANG'] || '';
+        if (konObj.fotoTiangBase64) {
+          const up = await uploadBase64ToDriveHelper(konObj.fotoTiangBase64, `${noWo}-TIANG.jpg`, '1GQ243ksFCRiGeMEV3fZoQjKjq2dYsIEN');
+          if (up) urlFotoTiang = up;
+        }
+        let urlFotoKonstruksi = konObj.fotoKonstruksi || konObj['FOTO KONSTRUKSI'] || '';
+        if (konObj.fotoKonstruksiBase64) {
+          const up = await uploadBase64ToDriveHelper(konObj.fotoKonstruksiBase64, `${noWo}-KONSTRUKSI_LANJUT.jpg`, '1GQ243ksFCRiGeMEV3fZoQjKjq2dYsIEN');
+          if (up) urlFotoKonstruksi = up;
+        }
+
+        const rawHazards = Array.isArray(payload.hazards) ? payload.hazards : [];
+        const normalizedHazards = await Promise.all(rawHazards.map(async (h: any, idx: number) => {
+          let hazUrl = h.foto || h['FOTO HAZARD'] || '';
+          if (hazUrl && (hazUrl.startsWith('data:') || hazUrl.includes('base64,'))) {
+            const up = await uploadBase64ToDriveHelper(hazUrl, `${noWo}-HAZARD-${idx + 1}.jpg`, '1aIchwEl_8uHm11p-pLNCNd5e6MFjQwQs');
+            hazUrl = up || '';
+          }
+          return {
+            'NO. WO': noWo,
+            'NAMA HAZARD': h.nama || h['NAMA HAZARD'] || '',
+            'KETERANGAN': h.keterangan || h['KETERANGAN'] || '',
+            'POTENSI': h.potensi || h['POTENSI'] || '',
+            'RISIKO': h.risiko || h['RISIKO'] || 'Rendah',
+            'MITIGASI': h.mitigasi || h['MITIGASI'] || '',
+            'FOTO HAZARD': hazUrl
+          };
         }));
 
         const normalizedPekerjaan = {
@@ -3848,25 +4032,23 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
           'DETAIL PEKERJAAN': detailPekerjaan
         };
 
-        const areaObj = payload.area || {};
         const normalizedArea = {
           'NO. WO': noWo,
           'AREA PEKERJAAN': areaObj.areaPekerjaan || areaObj['AREA PEKERJAAN'] || '',
-          'FOTO AREA': areaObj.fotoAreaBase64 || areaObj['FOTO AREA'] || '',
+          'FOTO AREA': urlFotoArea,
           'KONDISI TANAH': areaObj.kondisiTanah || areaObj['KONDISI TANAH'] || '',
-          'FOTO TANAH': areaObj.fotoTanahBase64 || areaObj['FOTO TANAH'] || '',
+          'FOTO TANAH': urlFotoTanah,
           'JARAK LOKASI-JALAN RAYA': areaObj.jarakJalanRaya || areaObj['JARAK LOKASI-JALAN RAYA'] || ''
         };
 
-        const konObj = payload.konstruksi || {};
         const normalizedKonstruksi = {
           'NO. WO': noWo,
           'SUTM': konObj.konstruksi1 || konObj['SUTM'] || '',
-          'FOTO SUTM': konObj.fotoSutmBase64 || konObj['FOTO SUTM'] || '',
+          'FOTO SUTM': urlFotoSutm,
           'TIANG': konObj.konstruksi2 || konObj['TIANG'] || '',
-          'FOTO TIANG': konObj.fotoTiangBase64 || konObj['FOTO TIANG'] || '',
+          'FOTO TIANG': urlFotoTiang,
           'KONSTRUKSI': konObj.konstruksi3 || konObj['KONSTRUKSI'] || '',
-          'FOTO KONSTRUKSI': konObj.fotoKonstruksiBase64 || konObj['FOTO KONSTRUKSI'] || ''
+          'FOTO KONSTRUKSI': urlFotoKonstruksi
         };
 
         const normalizedApproval = {
@@ -3892,8 +4074,18 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
           pic_unit: picUnit
         });
 
+        // Update selective in-memory cache directly
+        updateCachedWorkOrder({
+          noWo,
+          approvalPreparator: approvalStatus,
+          ketPreparator,
+          tanggalRencanakan: tanggalRencana,
+          status: approvalStatus === 'Layak' ? 'Disetujui' : (approvalStatus === 'Tidak Layak' ? 'Ditolak' : 'Menunggu Approval')
+        });
+
         mirrorToGoogleSheet('submitReviewForm', payload);
-        clearBackendCache();
+        clearBackendCache('getReviewedWOs');
+        clearBackendCache('getWorkPlans');
 
         return { 
           success: true, 
@@ -4001,36 +4193,50 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
         }
 
         if (payload.fotoBase64) {
-          const fotoDataUri = payload.fotoBase64.startsWith('data:') 
-            ? payload.fotoBase64 
-            : `data:${payload.fotoMime || 'image/jpeg'};base64,${payload.fotoBase64}`;
-          if (stepName) {
-            trackingUpdates[`foto_${stepName.toLowerCase()}`] = fotoDataUri;
+          const up = await uploadBase64ToDriveHelper(
+            payload.fotoBase64,
+            `${noWo}-${stepName || 'STEP'}.jpg`,
+            '1NiuBymtsoIy5_4PzPRbENXEIsVLY_GEV'
+          );
+          if (up && stepName) {
+            trackingUpdates[`foto_${stepName.toLowerCase()}`] = up;
           }
-          if (stepName === 'PELAKSANAAN' && (upperVal.includes('SELESAI') || upperVal === 'PEKERJAAN SELESAI')) {
-            trackingUpdates.foto_selesai = fotoDataUri;
+          if (up && stepName === 'PELAKSANAAN' && (upperVal.includes('SELESAI') || upperVal === 'PEKERJAAN SELESAI')) {
+            trackingUpdates.foto_selesai = up;
           }
         }
 
         if (payload.fotoSebelumBase64) {
-          trackingUpdates.foto_sebelum = payload.fotoSebelumBase64.startsWith('data:')
-            ? payload.fotoSebelumBase64
-            : `data:image/jpeg;base64,${payload.fotoSebelumBase64}`;
+          const up = await uploadBase64ToDriveHelper(
+            payload.fotoSebelumBase64,
+            `${noWo}-SEBELUM.jpg`,
+            '1NiuBymtsoIy5_4PzPRbENXEIsVLY_GEV'
+          );
+          if (up) trackingUpdates.foto_sebelum = up;
         }
         if (payload.fotoProses1Base64) {
-          trackingUpdates.foto_proses1 = payload.fotoProses1Base64.startsWith('data:')
-            ? payload.fotoProses1Base64
-            : `data:image/jpeg;base64,${payload.fotoProses1Base64}`;
+          const up = await uploadBase64ToDriveHelper(
+            payload.fotoProses1Base64,
+            `${noWo}-PROSES1.jpg`,
+            '1NiuBymtsoIy5_4PzPRbENXEIsVLY_GEV'
+          );
+          if (up) trackingUpdates.foto_proses1 = up;
         }
         if (payload.fotoProses2Base64) {
-          trackingUpdates.foto_proses2 = payload.fotoProses2Base64.startsWith('data:')
-            ? payload.fotoProses2Base64
-            : `data:image/jpeg;base64,${payload.fotoProses2Base64}`;
+          const up = await uploadBase64ToDriveHelper(
+            payload.fotoProses2Base64,
+            `${noWo}-PROSES2.jpg`,
+            '1NiuBymtsoIy5_4PzPRbENXEIsVLY_GEV'
+          );
+          if (up) trackingUpdates.foto_proses2 = up;
         }
         if (payload.fotoSelesaiBase64) {
-          trackingUpdates.foto_selesai = payload.fotoSelesaiBase64.startsWith('data:')
-            ? payload.fotoSelesaiBase64
-            : `data:image/jpeg;base64,${payload.fotoSelesaiBase64}`;
+          const up = await uploadBase64ToDriveHelper(
+            payload.fotoSelesaiBase64,
+            `${noWo}-SELESAI.jpg`,
+            '1NiuBymtsoIy5_4PzPRbENXEIsVLY_GEV'
+          );
+          if (up) trackingUpdates.foto_selesai = up;
         }
 
         // 4. Update in-memory tracking store
@@ -4238,9 +4444,15 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
           .update({ progres: 'PENDING' })
           .eq('no_wo', noWo);
 
-        const fotoDataUri = payload.fotoBase64
-          ? (payload.fotoBase64.startsWith('data:') ? payload.fotoBase64 : `data:${payload.fotoMime || 'image/jpeg'};base64,${payload.fotoBase64}`)
-          : null;
+        let fotoSwaUrl = '';
+        if (payload.fotoBase64) {
+          const up = await uploadBase64ToDriveHelper(
+            payload.fotoBase64,
+            `${noWo}-SWA.jpg`,
+            '1NiuBymtsoIy5_4PzPRbENXEIsVLY_GEV'
+          );
+          if (up) fotoSwaUrl = up;
+        }
 
         const swaUpdates: any = {
           no_wo: noWo,
@@ -4250,8 +4462,8 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
           ts_swa: timeStr,
           updated_at: new Date().toISOString()
         };
-        if (fotoDataUri) {
-          swaUpdates.foto_swa = fotoDataUri;
+        if (fotoSwaUrl) {
+          swaUpdates.foto_swa = fotoSwaUrl;
         }
 
         let curr = trackingMemoryStore.get(noWo);
@@ -4260,7 +4472,7 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
           curr['STATUS SWA'] = 'AKTIF';
           curr['Keterangan SWA'] = keterangan;
           curr['TS_SWA'] = timeStr;
-          if (fotoDataUri) curr['FOTO SWA'] = fotoDataUri;
+          if (fotoSwaUrl) curr['FOTO SWA'] = fotoSwaUrl;
           curr['PROGRES'] = 'PENDING';
           trackingMemoryStore.set(noWo, curr);
         }
@@ -4317,18 +4529,52 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
       case 'selesaikanPekerjaan': {
         const noWo = String(payload.noWo || '').trim();
         if (noWo) {
-          const tgl = payload.tanggalRealisasi || getJakartaDateString();
+          const dNow = new Date();
+          const pad = (n: number) => String(n).padStart(2, '0');
+          const tglID = `${pad(dNow.getDate())}/${pad(dNow.getMonth() + 1)}/${dNow.getFullYear()}`;
+          const tglSupabase = getJakartaDateString();
+          const rawTgl = payload.tanggalRealisasi;
+          let tglFormattedID = tglID;
+          if (rawTgl) {
+            const str = String(rawTgl).trim();
+            if (str.includes('/')) {
+              tglFormattedID = str;
+            } else {
+              const clean = str.includes('T') ? str.split('T')[0] : str.split(' ')[0];
+              const parts = clean.split('-');
+              if (parts.length === 3 && parts[0].length === 4) {
+                tglFormattedID = `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}/${parts[0]}`;
+              }
+            }
+          }
+
           await supabaseAdmin
             .from('work_plans')
             .update({
               progres: 'SELESAI',
-              tanggal_realisasi: tgl
+              tanggal_realisasi: tglSupabase
             })
             .eq('no_wo', noWo);
 
-          const fotoSelesaiDataUri = payload.fotoSelesaiBase64
-            ? (payload.fotoSelesaiBase64.startsWith('data:') ? payload.fotoSelesaiBase64 : `data:image/jpeg;base64,${payload.fotoSelesaiBase64}`)
-            : null;
+          let fotoSelesaiUrl = '';
+          if (payload.fotoSelesaiBase64) {
+            const up = await uploadBase64ToDriveHelper(
+              payload.fotoSelesaiBase64,
+              `${noWo}-SELESAI.jpg`,
+              '1NiuBymtsoIy5_4PzPRbENXEIsVLY_GEV'
+            );
+            if (up) fotoSelesaiUrl = up;
+          }
+
+          let collageUrl = '';
+          if (payload.collageBase64) {
+            const up = await uploadBase64ToDriveHelper(
+              payload.collageBase64,
+              payload.collageName || `${noWo}-REALISASI.jpg`,
+              '1ohUKW4PqwA5ANj2RLrvlkeHtHlHuET0Q'
+            );
+            if (up) collageUrl = up;
+          }
 
           const trackUpsert: any = {
             no_wo: noWo,
@@ -4338,8 +4584,8 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
             ts_pekerjaan_selesai: getJakartaTimeString(),
             updated_at: new Date().toISOString()
           };
-          if (fotoSelesaiDataUri) {
-            trackUpsert.foto_selesai = fotoSelesaiDataUri;
+          if (fotoSelesaiUrl) {
+            trackUpsert.foto_selesai = fotoSelesaiUrl;
           }
 
           try {
@@ -4354,12 +4600,12 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
             mem['PELAKSANAAN'] = 'Pekerjaan Selesai';
             mem['PROGRES'] = 'SELESAI';
             mem['TS_PEKERJAAN SELESAI'] = getJakartaTimeString();
-            if (fotoSelesaiDataUri) {
-              mem['FOTO SELESAI'] = fotoSelesaiDataUri;
-              mem.foto_selesai = fotoSelesaiDataUri;
+            if (fotoSelesaiUrl) {
+              mem['FOTO SELESAI'] = fotoSelesaiUrl;
+              mem.foto_selesai = fotoSelesaiUrl;
               if (!mem.lampiranSteps) mem.lampiranSteps = {};
               if (!mem.lampiranSteps.CL_PELAKSANAAN) mem.lampiranSteps.CL_PELAKSANAAN = {};
-              mem.lampiranSteps.CL_PELAKSANAAN['Foto Selesai'] = fotoSelesaiDataUri;
+              mem.lampiranSteps.CL_PELAKSANAAN['Foto Selesai'] = fotoSelesaiUrl;
             }
             trackingMemoryStore.set(noWo, mem);
           }
@@ -4375,10 +4621,6 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
             .select('*')
             .eq('no_wo', noWo)
             .maybeSingle();
-
-          const collageDataUri = payload.collageBase64
-            ? (payload.collageBase64.startsWith('data:') ? payload.collageBase64 : `data:image/jpeg;base64,${payload.collageBase64}`)
-            : null;
 
           // Lookup Segmen dari Master Data 4 Tabel (KODE SEGMEN & DATA UNIT)
           const segmenName = wpInfo?.segmen || woInfo?.segmen || payload.segmen || '';
@@ -4438,12 +4680,12 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
           const saifi = jumlah_pelanggan > 0 ? Number((pelanggan_padam / jumlah_pelanggan).toFixed(6)) : 0;
 
           const fotoSebelum = wpInfo?.foto_sebelum || woInfo?.foto_sebelum || woInfo?.foto_temuan || payload.fotoSebelum || null;
-          const fotoReal = collageDataUri || fotoSelesaiDataUri || null;
+          const fotoReal = (collageUrl && collageUrl.startsWith('http')) ? collageUrl : ((fotoSelesaiUrl && fotoSelesaiUrl.startsWith('http')) ? fotoSelesaiUrl : null);
 
           const realisasiRow: any = {
             no_wo: noWo,
             tanggal_direncanakan: wpInfo?.tanggal_direncanakan || woInfo?.tanggal_direncanakan || null,
-            tanggal_realisasi: tgl,
+            tanggal_realisasi: tglSupabase,
             surveyor: wpInfo?.surveyor || woInfo?.surveyor || '',
             ulp: wpInfo?.ulp || woInfo?.ulp || segmenInfo?.ulp || '',
             gardu_induk: wpInfo?.gardu_induk || woInfo?.gardu_induk || segmenInfo?.gardu_induk || '',
@@ -4462,7 +4704,7 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
             saidi,
             saifi,
             konfirmasi: 'MENUNGGU APPROVAL',
-            foto_sebelum: fotoSebelum,
+            foto_sebelum: (fotoSebelum && typeof fotoSebelum === 'string' && fotoSebelum.startsWith('http')) ? fotoSebelum : null,
             foto_realisasi: fotoReal
           };
 
@@ -4487,8 +4729,18 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
             console.error('[SUPABASE] Error saving realisasi row:', insertErr.message);
           }
 
+          // Update selective in-memory cache directly
+          updateCachedWorkPlan({
+            no_wo: noWo,
+            'NO. WO': noWo,
+            progres: 'SELESAI',
+            tanggal_realisasi: tglSupabase
+          });
+          updateCachedRealisasi(realisasiRow);
+
           mirrorToGoogleSheet('selesaikanPekerjaan', {
             ...payload,
+            tanggalRealisasi: tglFormattedID,
             bebanA: beban_a,
             pelangganPadam: pelanggan_padam,
             jumlahPelanggan: jumlah_pelanggan,
@@ -4500,10 +4752,10 @@ export async function handleSupabaseWrite(action: string, payload: any): Promise
             saifi: saifi
           });
         }
-        clearBackendCache('WorkPlan');
-        clearBackendCache('Realisasi');
-        clearBackendCache('Dashboard');
-        clearBackendCache('Tracking');
+        clearBackendCache('getRealisasiList');
+        clearBackendCache('getWorkPlans');
+        clearBackendCache('getTracking');
+        clearBackendCache('getDashboardStats');
         return { success: true, message: 'Pekerjaan berhasil diselesaikan dan dicatat di Supabase & Google Sheet.' };
       }
 

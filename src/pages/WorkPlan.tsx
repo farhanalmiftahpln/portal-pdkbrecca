@@ -1322,12 +1322,16 @@ export default function WorkPlan() {
                     setLoadingDetail(true);
                     try {
                       const noWo = selectedPlanDetail["NO. WO"] || selectedPlanDetail["NO WO"];
+                      const dNow = new Date();
+                      const pad = (n: number) => String(n).padStart(2, '0');
+                      const tglIndonesia = `${pad(dNow.getDate())}/${pad(dNow.getMonth() + 1)}/${dNow.getFullYear()}`;
                       const res = await gasService.post("selesaikanPekerjaan", {
                         noWo,
                         isCanceled: false,
                         collageBase64: collageBase64,
                         collageName: noWo + " - REALISASI.jpg",
                         fotoSelesaiBase64: sesudahUrl || undefined,
+                        tanggalRealisasi: tglIndonesia,
                       });
                       if (res.success) {
                         alert("Pekerjaan berhasil diselesaikan dan notifikasi terkirim!");
